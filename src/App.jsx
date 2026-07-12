@@ -3,6 +3,7 @@ import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Articles from './pages/Articles.jsx';
 import Ventes from './pages/Ventes.jsx';
+import EcranClient from './pages/EcranClient.jsx';
 
 function estConnecte() {
   return !!localStorage.getItem('jesma_token');
@@ -40,6 +41,7 @@ export default function App() {
           </RouteProtegee>
         }
       />
+      <Route path="/ecran-client" element={<EcranClient />} />
     </Routes>
   );
 }

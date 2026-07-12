@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { appelApi } from '../lib/api';
+import { appelApi, getUtilisateur } from '../lib/api';
+import { diffuserEtatPanier, diffuserVenteValidee, ecouterCanal } from '../lib/broadcast';
 
 const ONGLETS = [
   { id: 'nouvelle', label: 'Nouvelle vente' },
@@ -31,6 +32,8 @@ function chargerVentesEnAttente() {
 
 export default function Ventes() {
   const navigate = useNavigate();
+  const utilisateur = getUtilisateur();
+  const estAdmin = utilisateur?.role === 'ADMIN';
   const [ongletActif, setOngletActif] = useState('nouvelle');
 
   const [panier, setPanier] = useState([]);
@@ -65,6 +68,16 @@ export default function Ventes() {
     setVentesEnAttente(chargerVentesEnAttente());
   }, []);
 
+  // Les caissières ne choisissent pas la boutique : elle est fixée automatiquement sur
+  // le premier point de vente (type BOUTIQUE) dès que la liste des lieux est chargée.
+  // Seule Victoria (rôle ADMIN) peut la changer via le sélecteur.
+  useEffect(() => {
+    if (!estAdmin && !lieuId && lieux.length > 0) {
+      const boutique = lieux.find((l) => l.type === 'BOUTIQUE') || lieux[0];
+      if (boutique) setLieuId(String(boutique.id));
+    }
+  }, [lieux, estAdmin, lieuId]);
+
   function sauvegarderListeAttente(liste) {
     setVentesEnAttente(liste);
     localStorage.setItem(CLE_STOCKAGE_ATTENTE, JSON.stringify(liste));
@@ -78,7 +91,8 @@ export default function Ventes() {
     setRechercheEnCours(true);
     setErreurRecherche('');
     try {
-      const reponse = await appelApi('GET', `/articles/recherche?q=${encodeURIComponent(q)}`);
+      const suffixeLieu = lieuId ? `&lieuId=${lieuId}` : '';
+      const reponse = await appelApi('GET', `/articles/recherche?q=${encodeURIComponent(q)}${suffixeLieu}`);
       if (reponse.mode === 'exact' && reponse.resultats.length === 1) {
         ajouterAuPanier(reponse.resultats[0]);
         setResultats([]);
@@ -108,7 +122,8 @@ export default function Ventes() {
           designation: article.designation,
           prixUnitaire: Number(article.prixVente),
           quantite: 1,
-          stockDispo: article.stockActuel,
+          stockDispo: article.stockLieu ?? article.stockActuel,
+          photoUrl: article.photoUrl || null,
         },
       ];
     });
@@ -158,6 +173,22 @@ export default function Ventes() {
       setMontantAAjouter('');
     }
   }, [resteAPayer, panier.length]);
+
+  // Diffuse l'état courant du panier vers l'écran client à chaque changement, pour
+  // que le double écran caisse reste synchronisé en temps réel.
+  useEffect(() => {
+    diffuserEtatPanier({ panier, remise });
+  }, [panier, remise]);
+
+  // Répond immédiatement quand l'écran client demande l'état (à son ouverture),
+  // car BroadcastChannel ne transmet pas les messages passés.
+  useEffect(() => {
+    return ecouterCanal((message) => {
+      if (message.type === 'DEMANDE_ETAT') {
+        diffuserEtatPanier({ panier, remise });
+      }
+    });
+  }, [panier, remise]);
 
   function ajouterPaiement() {
     const montant = Number(montantAAjouter);
@@ -255,6 +286,7 @@ export default function Ventes() {
         paiements: paiements.map((p) => ({ mode: p.mode, montant: p.montant })),
       });
       setConfirmation(vente);
+      diffuserVenteValidee(vente);
       reinitialiserVente();
     } catch (err) {
       setErreurVente(err.message);
@@ -268,6 +300,12 @@ export default function Ventes() {
       <aside style={styles.sidebar}>
         <button onClick={() => navigate('/dashboard')} style={styles.boutonRetour}>
           ← Tableau de bord
+        </button>
+        <button
+          onClick={() => window.open('/ecran-client', 'ecranClientJesmaU', 'width=520,height=850')}
+          style={styles.boutonEcranClient}
+        >
+          🖥️ Écran client
         </button>
         <nav style={styles.nav}>
           {ONGLETS.map((onglet) => (
@@ -330,8 +368,13 @@ export default function Ventes() {
             <div style={styles.enTeteVente}>
               <div style={styles.blocBoutiqueVendeur}>
                 <label style={styles.champLabel}>
-                  Boutique
-                  <select style={styles.champInput} value={lieuId} onChange={(e) => setLieuId(e.target.value)}>
+                  Boutique {!estAdmin && <span style={styles.texteVerrouille}>(fixée)</span>}
+                  <select
+                    style={styles.champInput}
+                    value={lieuId}
+                    onChange={(e) => setLieuId(e.target.value)}
+                    disabled={!estAdmin}
+                  >
                     <option value="">—</option>
                     {lieux.map((l) => (
                       <option key={l.id} value={l.id}>{l.nom}</option>
@@ -402,7 +445,7 @@ export default function Ventes() {
                         <div>
                           <div style={{ fontWeight: 600 }}>{article.designation}</div>
                           <div style={{ fontSize: 12, color: 'var(--brown-soft)' }}>
-                            Stock : {article.stockActuel}
+                            Stock boutique : {article.stockLieu ?? article.stockActuel}
                           </div>
                         </div>
                         <div style={{ fontWeight: 700, color: 'var(--gold-deep)' }}>
@@ -565,6 +608,7 @@ const styles = {
   page: { display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-body)', color: 'var(--brown-ink)' },
   sidebar: { width: 220, background: 'var(--brown-deep)', color: 'var(--cream)', padding: 20, display: 'flex', flexDirection: 'column', gap: 16, flexShrink: 0 },
   boutonRetour: { padding: '8px 10px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', color: 'var(--cream)', cursor: 'pointer', fontSize: 13 },
+  boutonEcranClient: { padding: '8px 10px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontSize: 13, fontWeight: 600 },
   nav: { display: 'flex', flexDirection: 'column', gap: 4 },
   navItem: { padding: '10px 12px', borderRadius: 8, fontSize: 14, cursor: 'pointer', opacity: 0.8 },
   navItemActif: { padding: '10px 12px', borderRadius: 8, fontSize: 14, cursor: 'pointer', background: 'var(--gold-deep)', color: 'var(--white)', fontWeight: 600 },
@@ -576,6 +620,7 @@ const styles = {
   blocModeVente: { display: 'flex', gap: 12 },
   blocClient: { maxWidth: 400 },
   champLabel: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600 },
+  texteVerrouille: { fontWeight: 400, fontSize: 11, color: 'var(--brown-soft)' },
   champInput: { padding: '8px 10px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14, minWidth: 160 },
   bandeauConfirmation: { padding: '10px 14px', borderRadius: 8, background: '#DFF3E3', color: '#1E6B36', fontSize: 14, fontWeight: 600 },
   bandeauErreur: { padding: '10px 14px', borderRadius: 8, background: '#FBE4E1', color: 'var(--error)', fontSize: 14, fontWeight: 600 },
