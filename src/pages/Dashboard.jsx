@@ -23,9 +23,14 @@ export default function Dashboard() {
     <div style={{ padding: 32, fontFamily: 'sans-serif', color: '#4A2C17' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h1>Bonjour, {utilisateur?.nomComplet || 'Victoria'} 👋</h1>
-        <button onClick={deconnexion} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: 'transparent', cursor: 'pointer' }}>
-          Déconnexion
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+  <button onClick={() => navigate('/articles')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+    Articles
+  </button>
+  <button onClick={deconnexion} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: 'transparent', cursor: 'pointer' }}>
+    Déconnexion
+  </button>
+</div>
       </div>
 
       {erreur && <p style={{ color: '#B23A2E' }}>{erreur}</p>}
