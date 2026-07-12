@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { appelApi } from '../lib/api';
 
@@ -13,6 +13,11 @@ const ONGLETS = [
   { id: 'avoirs', label: 'Avoirs' },
 ];
 
+const MODES_PAIEMENT = [
+  'Espèces', 'Moov Money', 'MTN Money', 'Orange Money',
+  'Wave', 'Carte bancaire', 'Bon d\'achat', 'Avoir',
+];
+
 export default function Ventes() {
   const navigate = useNavigate();
   const [panier, setPanier] = useState([]);
@@ -22,6 +27,22 @@ export default function Ventes() {
   const [rechercheEnCours, setRechercheEnCours] = useState(false);
   const [remiseMontant, setRemiseMontant] = useState('');
   const [motifRemise, setMotifRemise] = useState('');
+
+  const [lieux, setLieux] = useState([]);
+  const [vendeurs, setVendeurs] = useState([]);
+  const [lieuId, setLieuId] = useState('');
+  const [vendeurId, setVendeurId] = useState('');
+  const [typeVente, setTypeVente] = useState('Comptant');
+  const [modePaiement, setModePaiement] = useState('');
+
+  const [venteEnCours, setVenteEnCours] = useState(false);
+  const [erreurVente, setErreurVente] = useState('');
+  const [confirmation, setConfirmation] = useState(null);
+
+  useEffect(() => {
+    appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
+    appelApi('GET', '/vendeurs').then(setVendeurs).catch(() => {});
+  }, []);
 
   async function gererRecherche(e) {
     e.preventDefault();
@@ -87,6 +108,52 @@ export default function Ventes() {
     setRecherche('');
   }
 
+  function reinitialiserVente() {
+    setPanier([]);
+    setRemiseMontant('');
+    setMotifRemise('');
+    setModePaiement('');
+  }
+
+  async function validerVente() {
+    setErreurVente('');
+
+    if (panier.length === 0) {
+      setErreurVente('Le panier est vide.');
+      return;
+    }
+    if (!lieuId) {
+      setErreurVente('Sélectionnez une boutique.');
+      return;
+    }
+    if (!modePaiement) {
+      setErreurVente('Sélectionnez un mode de paiement.');
+      return;
+    }
+
+    setVenteEnCours(true);
+    try {
+      const vente = await appelApi('POST', '/ventes', {
+        lieuId: Number(lieuId),
+        vendeurId: vendeurId ? Number(vendeurId) : null,
+        modePaiement,
+        remiseMontant: remise > 0 ? remise : undefined,
+        motifRemise: motifRemise || undefined,
+        lignes: panier.map((l) => ({
+          articleId: l.articleId,
+          quantite: l.quantite,
+          prixUnitaire: l.prixUnitaire,
+        })),
+      });
+      setConfirmation(vente);
+      reinitialiserVente();
+    } catch (err) {
+      setErreurVente(err.message);
+    } finally {
+      setVenteEnCours(false);
+    }
+  }
+
   const totalBrut = panier.reduce((somme, l) => somme + l.prixUnitaire * l.quantite, 0);
   const remise = Math.min(Number(remiseMontant) || 0, totalBrut);
   const totalNet = totalBrut - remise;
@@ -111,21 +178,27 @@ export default function Ventes() {
           <div style={styles.blocBoutiqueVendeur}>
             <label style={styles.champLabel}>
               Boutique
-              <select style={styles.champInput}>
-                <option>—</option>
+              <select style={styles.champInput} value={lieuId} onChange={(e) => setLieuId(e.target.value)}>
+                <option value="">—</option>
+                {lieux.map((l) => (
+                  <option key={l.id} value={l.id}>{l.nom}</option>
+                ))}
               </select>
             </label>
             <label style={styles.champLabel}>
               Vendeur
-              <select style={styles.champInput}>
-                <option>—</option>
+              <select style={styles.champInput} value={vendeurId} onChange={(e) => setVendeurId(e.target.value)}>
+                <option value="">—</option>
+                {vendeurs.map((v) => (
+                  <option key={v.id} value={v.id}>{v.nomComplet}</option>
+                ))}
               </select>
             </label>
           </div>
           <div style={styles.blocModeVente}>
             <label style={styles.champLabel}>
               Type de vente
-              <select style={styles.champInput}>
+              <select style={styles.champInput} value={typeVente} onChange={(e) => setTypeVente(e.target.value)}>
                 <option>Comptant</option>
                 <option>Crédit</option>
               </select>
@@ -139,6 +212,13 @@ export default function Ventes() {
             <input style={styles.champInput} placeholder="Rechercher un client…" />
           </label>
         </div>
+
+        {confirmation && (
+          <div style={styles.bandeauConfirmation}>
+            ✅ Vente {confirmation.numero} enregistrée — {Number(confirmation.totalNet).toLocaleString('fr-FR')} F
+          </div>
+        )}
+        {erreurVente && <div style={styles.bandeauErreur}>{erreurVente}</div>}
 
         <div style={styles.zonePrincipale}>
           <div style={styles.blocAjoutArticle}>
@@ -252,10 +332,27 @@ export default function Ventes() {
 
           <div style={styles.colonnePaiement}>
             <h3 style={styles.titreBloc}>Paiement</h3>
-            <p style={styles.texteMuet}>Paiement mixte à venir (étape suivante).</p>
+            <div style={styles.grillePaiement}>
+              {MODES_PAIEMENT.map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setModePaiement(mode)}
+                  style={mode === modePaiement ? styles.modePaiementActif : styles.modePaiement}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+
             <div style={styles.boutonsAction}>
               <button style={styles.boutonAttente}>Mettre en attente</button>
-              <button style={styles.boutonValider}>Valider la vente</button>
+              <button
+                onClick={validerVente}
+                disabled={venteEnCours}
+                style={styles.boutonValider}
+              >
+                {venteEnCours ? 'Validation…' : 'Valider la vente'}
+              </button>
             </div>
           </div>
         </div>
@@ -278,6 +375,8 @@ const styles = {
   blocClient: { maxWidth: 400 },
   champLabel: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600 },
   champInput: { padding: '8px 10px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14, minWidth: 160 },
+  bandeauConfirmation: { padding: '10px 14px', borderRadius: 8, background: '#DFF3E3', color: '#1E6B36', fontSize: 14, fontWeight: 600 },
+  bandeauErreur: { padding: '10px 14px', borderRadius: 8, background: '#FBE4E1', color: 'var(--error)', fontSize: 14, fontWeight: 600 },
   zonePrincipale: { display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 16, flex: 1 },
   blocAjoutArticle: { background: 'var(--white)', borderRadius: 12, padding: 16 },
   colonnePanier: { background: 'var(--white)', borderRadius: 12, padding: 16 },
@@ -296,6 +395,9 @@ const styles = {
   recapTotaux: { marginTop: 12, paddingTop: 12, borderTop: '2px solid var(--gold-mid)' },
   ligneRecap: { display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--brown-soft)', marginBottom: 4 },
   totalPanier: { marginTop: 4, fontWeight: 700, fontSize: 16, textAlign: 'right' },
+  grillePaiement: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 },
+  modePaiement: { padding: '10px 8px', borderRadius: 8, border: '1px solid var(--cream-deep)', background: 'transparent', cursor: 'pointer', fontSize: 13 },
+  modePaiementActif: { padding: '10px 8px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontSize: 13, fontWeight: 600 },
   boutonsAction: { marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 },
   boutonAttente: { padding: '10px 14px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer' },
   boutonValider: { padding: '10px 14px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
