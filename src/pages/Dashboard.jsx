@@ -23,7 +23,7 @@ export default function Dashboard() {
     <div style={{ padding: 32, fontFamily: 'sans-serif', color: '#4A2C17' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h1>Bonjour, {utilisateur?.nomComplet || 'Victoria'} 👋</h1>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
   <button onClick={() => navigate('/ventes')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
     Ventes
   </button>
@@ -32,6 +32,12 @@ export default function Dashboard() {
   </button>
   <button onClick={() => navigate('/stock')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
     Stock
+  </button>
+  <button onClick={() => navigate('/cartes-cadeaux')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+    Cartes cadeaux
+  </button>
+  <button onClick={() => navigate('/listes-cadeaux')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+    Listes cadeaux
   </button>
   <button onClick={deconnexion} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: 'transparent', cursor: 'pointer' }}>
     Déconnexion

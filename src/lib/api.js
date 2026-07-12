@@ -38,6 +38,25 @@ export async function appelApi(methode, chemin, corps) {
   return data;
 }
 
+// Appel API sans authentification, pour les pages publiques (ex: consultation d'une
+// liste cadeau via son lien partagé) — jamais de token envoyé, même si l'utilisateur
+// courant est connecté par ailleurs dans un autre onglet.
+export async function appelApiPublic(methode, chemin, corps) {
+  const reponse = await fetch(`${BASE_URL}${chemin}`, {
+    method: methode,
+    headers: { 'Content-Type': 'application/json' },
+    body: corps ? JSON.stringify(corps) : undefined,
+  });
+  const texte = await reponse.text();
+  let data;
+  try { data = texte ? JSON.parse(texte) : null; } catch { data = texte; }
+  if (!reponse.ok) {
+    const message = (data && data.error) || 'Une erreur est survenue.';
+    throw new Error(message);
+  }
+  return data;
+}
+
 // Upload multipart (photo article) : pas de Content-Type JSON, FormData gère l'en-tête lui-même
 export async function uploaderPhotoArticle(articleId, fichier) {
   const headers = {};

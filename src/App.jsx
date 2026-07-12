@@ -5,6 +5,9 @@ import Articles from './pages/Articles.jsx';
 import Ventes from './pages/Ventes.jsx';
 import EcranClient from './pages/EcranClient.jsx';
 import Stock from './pages/Stock.jsx';
+import CartesCadeaux from './pages/CartesCadeaux.jsx';
+import ListesCadeaux from './pages/ListesCadeaux.jsx';
+import ListeCadeauPublique from './pages/ListeCadeauPublique.jsx';
 
 function estConnecte() {
   return !!localStorage.getItem('jesma_token');
@@ -50,6 +53,23 @@ export default function App() {
           </RouteProtegee>
         }
       />
+      <Route
+        path="/cartes-cadeaux"
+        element={
+          <RouteProtegee>
+            <CartesCadeaux />
+          </RouteProtegee>
+        }
+      />
+      <Route
+        path="/listes-cadeaux"
+        element={
+          <RouteProtegee>
+            <ListesCadeaux />
+          </RouteProtegee>
+        }
+      />
+      <Route path="/liste-cadeau/:codeAcces" element={<ListeCadeauPublique />} />
       <Route path="/ecran-client" element={<EcranClient />} />
     </Routes>
   );
