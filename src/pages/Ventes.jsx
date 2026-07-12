@@ -20,6 +20,8 @@ export default function Ventes() {
   const [resultats, setResultats] = useState([]);
   const [erreurRecherche, setErreurRecherche] = useState('');
   const [rechercheEnCours, setRechercheEnCours] = useState(false);
+  const [remiseMontant, setRemiseMontant] = useState('');
+  const [motifRemise, setMotifRemise] = useState('');
 
   async function gererRecherche(e) {
     e.preventDefault();
@@ -85,7 +87,9 @@ export default function Ventes() {
     setRecherche('');
   }
 
-  const totalPanier = panier.reduce((somme, l) => somme + l.prixUnitaire * l.quantite, 0);
+  const totalBrut = panier.reduce((somme, l) => somme + l.prixUnitaire * l.quantite, 0);
+  const remise = Math.min(Number(remiseMontant) || 0, totalBrut);
+  const totalNet = totalBrut - remise;
 
   return (
     <div style={styles.page}>
@@ -199,10 +203,50 @@ export default function Ventes() {
                 <button onClick={() => retirerDuPanier(ligne.articleId)} style={styles.boutonRetirer}>✕</button>
               </div>
             ))}
+
             {panier.length > 0 && (
-              <div style={styles.totalPanier}>
-                Total : {totalPanier.toLocaleString('fr-FR')} F
-              </div>
+              <>
+                <div style={styles.blocRemise}>
+                  <label style={styles.champLabel}>
+                    Remise (F)
+                    <input
+                      type="number"
+                      min="0"
+                      style={styles.champInput}
+                      value={remiseMontant}
+                      onChange={(e) => setRemiseMontant(e.target.value)}
+                      placeholder="0"
+                    />
+                  </label>
+                  {Number(remiseMontant) > 0 && (
+                    <label style={styles.champLabel}>
+                      Motif de la remise
+                      <input
+                        style={styles.champInput}
+                        value={motifRemise}
+                        onChange={(e) => setMotifRemise(e.target.value)}
+                        placeholder="Optionnel…"
+                      />
+                    </label>
+                  )}
+                </div>
+
+                <div style={styles.recapTotaux}>
+                  <div style={styles.ligneRecap}>
+                    <span>Sous-total</span>
+                    <span>{totalBrut.toLocaleString('fr-FR')} F</span>
+                  </div>
+                  {remise > 0 && (
+                    <div style={styles.ligneRecap}>
+                      <span>Remise</span>
+                      <span style={{ color: 'var(--error)' }}>−{remise.toLocaleString('fr-FR')} F</span>
+                    </div>
+                  )}
+                  <div style={styles.totalPanier}>
+                    Total : {totalNet.toLocaleString('fr-FR')} F
+                  </div>
+                </div>
+              </>
             )}
           </div>
 
@@ -248,7 +292,10 @@ const styles = {
   controlesQuantite: { display: 'flex', alignItems: 'center', gap: 6 },
   boutonQte: { width: 24, height: 24, borderRadius: 6, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer' },
   boutonRetirer: { border: 'none', background: 'transparent', color: 'var(--error)', cursor: 'pointer', fontSize: 14 },
-  totalPanier: { marginTop: 12, paddingTop: 12, borderTop: '2px solid var(--gold-mid)', fontWeight: 700, fontSize: 16, textAlign: 'right' },
+  blocRemise: { display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14, paddingTop: 14, borderTop: '1px dashed var(--cream-deep)' },
+  recapTotaux: { marginTop: 12, paddingTop: 12, borderTop: '2px solid var(--gold-mid)' },
+  ligneRecap: { display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--brown-soft)', marginBottom: 4 },
+  totalPanier: { marginTop: 4, fontWeight: 700, fontSize: 16, textAlign: 'right' },
   boutonsAction: { marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 },
   boutonAttente: { padding: '10px 14px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer' },
   boutonValider: { padding: '10px 14px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
