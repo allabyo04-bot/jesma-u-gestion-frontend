@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import Articles from './pages/Articles.jsx';
 import Ventes from './pages/Ventes.jsx';
 import EcranClient from './pages/EcranClient.jsx';
+import Stock from './pages/Stock.jsx';
 
 function estConnecte() {
   return !!localStorage.getItem('jesma_token');
@@ -38,6 +39,14 @@ export default function App() {
         element={
           <RouteProtegee>
             <Ventes />
+          </RouteProtegee>
+        }
+      />
+      <Route
+        path="/stock"
+        element={
+          <RouteProtegee>
+            <Stock />
           </RouteProtegee>
         }
       />
