@@ -1,0 +1,42 @@
+:root {
+  --cream: #FBF3DD;
+  --cream-deep: #F5E9C8;
+  --brown-ink: #4A2C17;
+  --brown-deep: #2E1A0D;
+  --brown-soft: #7A5233;
+  --gold-light: #F0C572;
+  --gold-mid: #D9A144;
+  --gold-deep: #B87F2C;
+  --white: #FFFFFF;
+  --error: #B23A2E;
+
+  --font-display: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
+  --font-body: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--brown-ink);
+  background: var(--cream);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--gold-deep);
+  outline-offset: 2px;
+}
