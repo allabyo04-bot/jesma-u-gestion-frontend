@@ -33,7 +33,11 @@ export default function Ventes() {
   const [lieuId, setLieuId] = useState('');
   const [vendeurId, setVendeurId] = useState('');
   const [typeVente, setTypeVente] = useState('Comptant');
-  const [modePaiement, setModePaiement] = useState('');
+
+  // Paiement mixte : liste de { mode, montant }
+  const [paiements, setPaiements] = useState([]);
+  const [modeAAjouter, setModeAAjouter] = useState(MODES_PAIEMENT[0]);
+  const [montantAAjouter, setMontantAAjouter] = useState('');
 
   const [venteEnCours, setVenteEnCours] = useState(false);
   const [erreurVente, setErreurVente] = useState('');
@@ -112,7 +116,35 @@ export default function Ventes() {
     setPanier([]);
     setRemiseMontant('');
     setMotifRemise('');
-    setModePaiement('');
+    setPaiements([]);
+    setMontantAAjouter('');
+  }
+
+  const totalBrut = panier.reduce((somme, l) => somme + l.prixUnitaire * l.quantite, 0);
+  const remise = Math.min(Number(remiseMontant) || 0, totalBrut);
+  const totalNet = totalBrut - remise;
+  const totalPaiements = paiements.reduce((s, p) => s + p.montant, 0);
+  const resteAPayer = totalNet - totalPaiements;
+
+  // Pré-remplit le montant à ajouter avec le solde restant à chaque changement du solde,
+  // pour que l'usage courant (payer en un seul mode) se fasse en un clic sur "Ajouter",
+  // tout en restant éditable pour un paiement mixte (on baisse le montant avant d'ajouter).
+  useEffect(() => {
+    if (panier.length > 0 && resteAPayer > 0) {
+      setMontantAAjouter(String(resteAPayer));
+    } else if (panier.length === 0) {
+      setMontantAAjouter('');
+    }
+  }, [resteAPayer, panier.length]);
+
+  function ajouterPaiement() {
+    const montant = Number(montantAAjouter);
+    if (!montant || montant <= 0) return;
+    setPaiements((prec) => [...prec, { mode: modeAAjouter, montant }]);
+  }
+
+  function retirerPaiement(index) {
+    setPaiements((prec) => prec.filter((_, i) => i !== index));
   }
 
   async function validerVente() {
@@ -126,8 +158,16 @@ export default function Ventes() {
       setErreurVente('Sélectionnez une boutique.');
       return;
     }
-    if (!modePaiement) {
-      setErreurVente('Sélectionnez un mode de paiement.');
+    if (paiements.length === 0) {
+      setErreurVente('Ajoutez au moins un mode de paiement.');
+      return;
+    }
+    if (Math.abs(resteAPayer) > 1) {
+      setErreurVente(
+        resteAPayer > 0
+          ? `Il reste ${resteAPayer.toLocaleString('fr-FR')} F à couvrir.`
+          : `Le total des paiements dépasse le montant de ${Math.abs(resteAPayer).toLocaleString('fr-FR')} F.`
+      );
       return;
     }
 
@@ -136,7 +176,6 @@ export default function Ventes() {
       const vente = await appelApi('POST', '/ventes', {
         lieuId: Number(lieuId),
         vendeurId: vendeurId ? Number(vendeurId) : null,
-        modePaiement,
         remiseMontant: remise > 0 ? remise : undefined,
         motifRemise: motifRemise || undefined,
         lignes: panier.map((l) => ({
@@ -144,6 +183,7 @@ export default function Ventes() {
           quantite: l.quantite,
           prixUnitaire: l.prixUnitaire,
         })),
+        paiements: paiements.map((p) => ({ mode: p.mode, montant: p.montant })),
       });
       setConfirmation(vente);
       reinitialiserVente();
@@ -153,10 +193,6 @@ export default function Ventes() {
       setVenteEnCours(false);
     }
   }
-
-  const totalBrut = panier.reduce((somme, l) => somme + l.prixUnitaire * l.quantite, 0);
-  const remise = Math.min(Number(remiseMontant) || 0, totalBrut);
-  const totalNet = totalBrut - remise;
 
   return (
     <div style={styles.page}>
@@ -332,17 +368,60 @@ export default function Ventes() {
 
           <div style={styles.colonnePaiement}>
             <h3 style={styles.titreBloc}>Paiement</h3>
-            <div style={styles.grillePaiement}>
-              {MODES_PAIEMENT.map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setModePaiement(mode)}
-                  style={mode === modePaiement ? styles.modePaiementActif : styles.modePaiement}
-                >
-                  {mode}
-                </button>
-              ))}
+
+            <div style={styles.ajoutPaiement}>
+              <select
+                style={styles.champInput}
+                value={modeAAjouter}
+                onChange={(e) => setModeAAjouter(e.target.value)}
+              >
+                {MODES_PAIEMENT.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min="0"
+                style={{ ...styles.champInput, minWidth: 100 }}
+                placeholder="Montant"
+                value={montantAAjouter}
+                onChange={(e) => setMontantAAjouter(e.target.value)}
+              />
+              <button onClick={ajouterPaiement} style={styles.boutonAjouterPaiement}>
+                Ajouter
+              </button>
             </div>
+
+            {paiements.length > 0 && (
+              <div style={styles.listePaiements}>
+                {paiements.map((p, index) => (
+                  <div key={index} style={styles.lignePaiement}>
+                    <span>{p.mode}</span>
+                    <span style={{ fontWeight: 600 }}>{p.montant.toLocaleString('fr-FR')} F</span>
+                    <button onClick={() => retirerPaiement(index)} style={styles.boutonRetirer}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {panier.length > 0 && (
+              <div style={styles.recapPaiement}>
+                <div style={styles.ligneRecap}>
+                  <span>Total payé</span>
+                  <span>{totalPaiements.toLocaleString('fr-FR')} F</span>
+                </div>
+                <div
+                  style={{
+                    ...styles.ligneRecap,
+                    fontWeight: 700,
+                    color: Math.abs(resteAPayer) <= 1 ? '#1E6B36' : 'var(--error)',
+                  }}
+                >
+                  <span>{resteAPayer > 1 ? 'Reste à payer' : resteAPayer < -1 ? 'Excédent' : 'Complet'}</span>
+                  <span>{resteAPayer.toLocaleString('fr-FR')} F</span>
+                </div>
+              </div>
+            )}
 
             <div style={styles.boutonsAction}>
               <button style={styles.boutonAttente}>Mettre en attente</button>
@@ -395,10 +474,13 @@ const styles = {
   recapTotaux: { marginTop: 12, paddingTop: 12, borderTop: '2px solid var(--gold-mid)' },
   ligneRecap: { display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--brown-soft)', marginBottom: 4 },
   totalPanier: { marginTop: 4, fontWeight: 700, fontSize: 16, textAlign: 'right' },
-  grillePaiement: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 },
-  modePaiement: { padding: '10px 8px', borderRadius: 8, border: '1px solid var(--cream-deep)', background: 'transparent', cursor: 'pointer', fontSize: 13 },
-  modePaiementActif: { padding: '10px 8px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontSize: 13, fontWeight: 600 },
-  boutonsAction: { marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 },
+  ajoutPaiement: { display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' },
+  boutonAjouterPaiement: { padding: '8px 12px', borderRadius: 8, border: 'none', background: 'var(--gold-mid)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 13 },
+  boutonCompleter: { padding: '8px 10px', borderRadius: 8, border: '1px dashed var(--gold-mid)', background: 'transparent', cursor: 'pointer', fontSize: 12, marginBottom: 10, textAlign: 'left' },
+  listePaiements: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 },
+  lignePaiement: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6, background: 'var(--cream)', fontSize: 13 },
+  recapPaiement: { marginTop: 4, paddingTop: 10, borderTop: '2px solid var(--gold-mid)' },
+  boutonsAction: { marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12 },
   boutonAttente: { padding: '10px 14px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer' },
   boutonValider: { padding: '10px 14px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
 };
