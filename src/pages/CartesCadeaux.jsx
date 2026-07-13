@@ -24,6 +24,13 @@ export default function CartesCadeaux() {
   const [carteConsultee, setCarteConsultee] = useState(null);
   const [erreurConsultation, setErreurConsultation] = useState('');
 
+  // Compteurs par statut — la circulation (cartes vendues mais pas encore dépensées)
+  // représente l'encours : de l'argent déjà encaissé, dû en marchandise aux clients.
+  const cartesInactives = cartes.filter((c) => c.statut === 'INACTIVE');
+  const cartesActives = cartes.filter((c) => c.statut === 'ACTIVE');
+  const cartesUtilisees = cartes.filter((c) => c.statut === 'UTILISEE');
+  const montantEnCirculation = cartesActives.reduce((s, c) => s + Number(c.denomination), 0);
+
   useEffect(() => {
     charger();
   }, []);
@@ -87,6 +94,24 @@ export default function CartesCadeaux() {
           ← Tableau de bord
         </button>
         <h1 style={styles.titre}>Cartes cadeaux</h1>
+      </div>
+
+      <div style={styles.blocCompteurs}>
+        <div style={styles.compteurCarte}>
+          <div style={styles.chiffreCompteur}>{cartesInactives.length}</div>
+          <div style={styles.libelleCompteur}>Non activées (stock)</div>
+        </div>
+        <div style={styles.compteurCarteVedette}>
+          <div style={styles.chiffreCompteurVedette}>{cartesActives.length}</div>
+          <div style={styles.libelleCompteurVedette}>Actives en circulation</div>
+          <div style={styles.montantCompteurVedette}>
+            {montantEnCirculation.toLocaleString('fr-FR')} F en encours
+          </div>
+        </div>
+        <div style={styles.compteurCarte}>
+          <div style={styles.chiffreCompteur}>{cartesUtilisees.length}</div>
+          <div style={styles.libelleCompteur}>Déjà utilisées</div>
+        </div>
       </div>
 
       <div style={styles.grilleDeux}>
@@ -192,6 +217,14 @@ export default function CartesCadeaux() {
 }
 
 const styles = {
+  blocCompteurs: { display: 'grid', gridTemplateColumns: '1fr 1.4fr 1fr', gap: 16 },
+  compteurCarte: { background: 'var(--white)', borderRadius: 14, padding: 18, textAlign: 'center' },
+  chiffreCompteur: { fontSize: 28, fontWeight: 700, color: 'var(--brown-soft)' },
+  libelleCompteur: { fontSize: 12, color: 'var(--brown-soft)', marginTop: 4 },
+  compteurCarteVedette: { background: 'var(--gold-deep)', borderRadius: 14, padding: 18, textAlign: 'center', color: 'var(--white)' },
+  chiffreCompteurVedette: { fontSize: 34, fontWeight: 800 },
+  libelleCompteurVedette: { fontSize: 13, fontWeight: 600, marginTop: 4 },
+  montantCompteurVedette: { fontSize: 15, fontWeight: 700, marginTop: 8, opacity: 0.95 },
   page: { padding: 32, fontFamily: 'var(--font-body)', color: 'var(--brown-ink)', display: 'flex', flexDirection: 'column', gap: 20 },
   enTete: { display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' },
   boutonRetour: { padding: '8px 14px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer', color: 'var(--brown-ink)' },
