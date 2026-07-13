@@ -5,6 +5,12 @@ import { appelApi } from '../lib/api';
 const SOUS_ONGLETS = [
   { id: 'nouvelle', label: 'Nouvelle liste' },
   { id: 'existantes', label: 'Listes existantes' },
+  { id: 'en-attente', label: 'Offres en attente' },
+];
+
+const MODES_PAIEMENT = [
+  'Espèces', 'Moov Money', 'MTN Money', 'Orange Money',
+  'Wave', 'Carte bancaire', 'Bon d\'achat',
 ];
 
 export default function ListesCadeaux() {
@@ -54,6 +60,7 @@ export default function ListesCadeaux() {
       {ongletActif === 'existantes' && (
         <OngletListesExistantes listes={listes} chargement={chargementListes} onRafraichir={chargerListes} />
       )}
+      {ongletActif === 'en-attente' && <OngletOffresEnAttente />}
     </div>
   );
 }
@@ -368,12 +375,21 @@ function OngletListesExistantes({ listes, chargement, onRafraichir }) {
 }
 
 function DetailListe({ liste, onOffrande }) {
+  const [typePaiement, setTypePaiement] = useState('carte'); // 'carte' | 'autre'
   const [carteCadeauCode, setCarteCadeauCode] = useState('');
+  const [modePaiementChoisi, setModePaiementChoisi] = useState(MODES_PAIEMENT[0]);
   const [offrePar, setOffrePar] = useState('');
   const [quantitesChoisies, setQuantitesChoisies] = useState({});
   const [erreur, setErreur] = useState('');
   const [succes, setSucces] = useState('');
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
+
+  // Montant calculé automatiquement à partir des articles/quantités sélectionnés — jamais
+  // saisi librement, pour garantir que ce qui est déclaré correspond à ce qui est offert.
+  const montantCalcule = liste.lignes.reduce((total, l) => {
+    const q = Number(quantitesChoisies[l.id]) || 0;
+    return total + q * Number(l.article.prixVente);
+  }, 0);
 
   function imprimerListe() {
     const nomDest = liste.nomDestinataire || liste.client.nomComplet;
@@ -550,10 +566,12 @@ function DetailListe({ liste, onOffrande }) {
   async function offrir() {
     setErreur('');
     setSucces('');
-    if (!carteCadeauCode.trim()) {
+
+    if (typePaiement === 'carte' && !carteCadeauCode.trim()) {
       setErreur('Code-barres de la carte cadeau requis.');
       return;
     }
+
     const lignesChoisies = Object.entries(quantitesChoisies)
       .filter(([, q]) => Number(q) > 0)
       .map(([ligneId, quantite]) => ({ ligneId: Number(ligneId), quantite: Number(quantite) }));
@@ -566,12 +584,15 @@ function DetailListe({ liste, onOffrande }) {
     setEnvoiEnCours(true);
     try {
       await appelApi('POST', `/listes-cadeaux/${liste.codeAcces}/offrir-telephone`, {
-        carteCadeauCode: carteCadeauCode.trim(),
+        carteCadeauCode: typePaiement === 'carte' ? carteCadeauCode.trim() : undefined,
+        modePaiement: typePaiement === 'autre' ? modePaiementChoisi : undefined,
+        montant: typePaiement === 'autre' ? montantCalcule : undefined,
         offrePar: offrePar || undefined,
         lignes: lignesChoisies,
       });
       setSucces('Cadeau offert avec succès !');
       setCarteCadeauCode('');
+      setModePaiementChoisi(MODES_PAIEMENT[0]);
       setOffrePar('');
       setQuantitesChoisies({});
       onOffrande();
@@ -629,13 +650,42 @@ function DetailListe({ liste, onOffrande }) {
       <h4 style={{ marginTop: 16, marginBottom: 8, fontSize: 14 }}>Offrir par téléphone (saisie vendeuse)</h4>
       {erreur && <div style={styles.bandeauErreur}>{erreur}</div>}
       {succes && <div style={styles.bandeauConfirmation}>{succes}</div>}
+
+      <div style={styles.togglePaiement}>
+        <button
+          onClick={() => setTypePaiement('carte')}
+          style={typePaiement === 'carte' ? styles.toggleActif : styles.toggle}
+        >
+          Carte cadeau
+        </button>
+        <button
+          onClick={() => setTypePaiement('autre')}
+          style={typePaiement === 'autre' ? styles.toggleActif : styles.toggle}
+        >
+          Autre mode de paiement
+        </button>
+      </div>
+
       <div style={styles.ligneChamps}>
-        <input
-          style={styles.champInput}
-          value={carteCadeauCode}
-          onChange={(e) => setCarteCadeauCode(e.target.value)}
-          placeholder="Code-barres carte cadeau"
-        />
+        {typePaiement === 'carte' ? (
+          <input
+            style={styles.champInput}
+            value={carteCadeauCode}
+            onChange={(e) => setCarteCadeauCode(e.target.value)}
+            placeholder="Code-barres carte cadeau"
+          />
+        ) : (
+          <>
+            <select style={styles.champInput} value={modePaiementChoisi} onChange={(e) => setModePaiementChoisi(e.target.value)}>
+              {MODES_PAIEMENT.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <div style={styles.montantCalcule}>
+              {montantCalcule.toLocaleString('fr-FR')} F
+            </div>
+          </>
+        )}
         <input
           style={styles.champInput}
           value={offrePar}
@@ -646,11 +696,140 @@ function DetailListe({ liste, onOffrande }) {
           {envoiEnCours ? 'Envoi…' : 'Offrir'}
         </button>
       </div>
+      {typePaiement === 'autre' && (
+        <p style={styles.texteMuet}>
+          Montant calculé automatiquement à partir des articles choisis ci-dessus — à utiliser
+          uniquement après avoir vérifié la réception du paiement (confirmé immédiatement).
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
+// ONGLET OFFRES EN ATTENTE (validation Victoria)
+// ------------------------------------------------------------
+function OngletOffresEnAttente() {
+  const [offres, setOffres] = useState([]);
+  const [chargement, setChargement] = useState(true);
+  const [erreur, setErreur] = useState('');
+  const [actionEnCours, setActionEnCours] = useState(null);
+
+  useEffect(() => {
+    charger();
+  }, []);
+
+  function charger() {
+    setChargement(true);
+    setErreur('');
+    appelApi('GET', '/listes-cadeaux/offres-en-attente')
+      .then(setOffres)
+      .catch((err) => setErreur(err.message))
+      .finally(() => setChargement(false));
+  }
+
+  async function confirmer(id) {
+    setActionEnCours(id);
+    try {
+      await appelApi('POST', `/listes-cadeaux/offres/${id}/confirmer`);
+      charger();
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setActionEnCours(null);
+    }
+  }
+
+  async function rejeter(id) {
+    const motif = window.prompt('Motif du rejet (optionnel) :') || '';
+    setActionEnCours(id);
+    try {
+      await appelApi('POST', `/listes-cadeaux/offres/${id}/rejeter`, { motif: motif || undefined });
+      charger();
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setActionEnCours(null);
+    }
+  }
+
+  return (
+    <div style={styles.carte}>
+      <h3 style={styles.titreCarte}>Offres à vérifier (paiements déclarés à distance)</h3>
+      <p style={styles.texteMuet}>
+        Ces cadeaux ont été déclarés depuis le lien public, sans carte cadeau — vérifiez la réception
+        réelle du paiement (Mobile Money, Wave...) avant de confirmer.
+      </p>
+
+      {erreur && <div style={styles.bandeauErreur}>{erreur}</div>}
+      {chargement && <p style={styles.texteMuet}>Chargement…</p>}
+      {!chargement && offres.length === 0 && (
+        <p style={styles.texteMuet}>Aucune offre en attente de vérification.</p>
+      )}
+
+      <div style={styles.listeCartesListes}>
+        {offres.map((offre) => (
+          <div key={offre.id} style={styles.carteOffre}>
+            <div style={styles.enTeteListe}>
+              <div>
+                <div style={{ fontWeight: 700 }}>
+                  {offre.listeCadeau.titre || `Liste de ${offre.listeCadeau.client.nomComplet}`}
+                </div>
+                <div style={styles.texteMuet}>
+                  {new Date(offre.createdAt).toLocaleDateString('fr-FR')} à{' '}
+                  {new Date(offre.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontWeight: 700, color: 'var(--gold-deep)' }}>
+                  {Number(offre.montantUtilise).toLocaleString('fr-FR')} F
+                </div>
+                <div style={styles.texteMuet}>{offre.modePaiement}</div>
+              </div>
+            </div>
+
+            {offre.offrePar && (
+              <div style={styles.texteMuet}>Offert par : {offre.offrePar}</div>
+            )}
+
+            <div style={styles.listeLignes}>
+              {offre.lignesCouvertes.map((detail) => (
+                <div key={detail.id} style={styles.ligneItem}>
+                  <span>{detail.ligneListeCadeau.article.designation}</span>
+                  <span style={{ fontWeight: 600 }}>× {detail.quantite}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={styles.boutonsCarteAttente}>
+              <button
+                onClick={() => confirmer(offre.id)}
+                disabled={actionEnCours === offre.id}
+                style={styles.boutonReprendre}
+              >
+                {actionEnCours === offre.id ? '…' : '✓ Confirmer la réception'}
+              </button>
+              <button
+                onClick={() => rejeter(offre.id)}
+                disabled={actionEnCours === offre.id}
+                style={styles.boutonRetirer}
+              >
+                ✕ Rejeter
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 const styles = {
+  togglePaiement: { display: 'flex', gap: 8, marginBottom: 12 },
+  toggle: { padding: '8px 14px', borderRadius: 20, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer', fontSize: 13, color: 'var(--brown-ink)' },
+  toggleActif: { padding: '8px 14px', borderRadius: 20, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontSize: 13, fontWeight: 600 },
+  montantCalcule: { padding: '8px 14px', borderRadius: 8, background: 'var(--cream)', fontWeight: 700, color: 'var(--gold-deep)', fontSize: 14, minWidth: 100, textAlign: 'center' },
+  carteOffre: { background: 'var(--white)', borderRadius: 14, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 },
   page: { padding: 32, fontFamily: 'var(--font-body)', color: 'var(--brown-ink)', display: 'flex', flexDirection: 'column', gap: 20 },
   enTete: { display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' },
   boutonRetour: { padding: '8px 14px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer', color: 'var(--brown-ink)' },
