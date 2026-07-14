@@ -50,7 +50,6 @@ export default function Ventes() {
   const [vendeurId, setVendeurId] = useState('');
   const [typeVente, setTypeVente] = useState('Comptant');
 
-  // Paiement mixte : liste de { mode, montant }
   const [paiements, setPaiements] = useState([]);
   const [modeAAjouter, setModeAAjouter] = useState(MODES_PAIEMENT[0]);
   const [montantAAjouter, setMontantAAjouter] = useState('');
@@ -59,8 +58,17 @@ export default function Ventes() {
   const [erreurVente, setErreurVente] = useState('');
   const [confirmation, setConfirmation] = useState(null);
 
-  // Ventes suspendues (stockage local navigateur — une seule caisse pour l'instant)
   const [ventesEnAttente, setVentesEnAttente] = useState([]);
+
+  // --- Ventes à crédit ---
+  const [creditVentes, setCreditVentes] = useState([]);
+  const [creditChargement, setCreditChargement] = useState(false);
+  const [creditErreur, setCreditErreur] = useState('');
+  const [creditFiltre, setCreditFiltre] = useState('EN_COURS'); // EN_COURS | SOLDE | tous
+  const [venteReglementOuvert, setVenteReglementOuvert] = useState(null); // id de la vente en cours de règlement
+  const [modeReglement, setModeReglement] = useState(MODES_PAIEMENT[0]);
+  const [montantReglement, setMontantReglement] = useState('');
+  const [reglementEnCours, setReglementEnCours] = useState(false);
 
   useEffect(() => {
     appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
@@ -74,6 +82,56 @@ export default function Ventes() {
       if (boutique) setLieuId(String(boutique.id));
     }
   }, [lieux, estAdmin, lieuId]);
+
+  async function chargerCredits() {
+    setCreditChargement(true);
+    setCreditErreur('');
+    try {
+      const suffixe = creditFiltre !== 'TOUS' ? `?statut=${creditFiltre}` : '';
+      const donnees = await appelApi('GET', `/credits${suffixe}`);
+      setCreditVentes(donnees);
+    } catch (err) {
+      setCreditErreur(err.message);
+    } finally {
+      setCreditChargement(false);
+    }
+  }
+
+  useEffect(() => {
+    if (ongletActif === 'credit') {
+      chargerCredits();
+    }
+  }, [ongletActif, creditFiltre]);
+
+  function ouvrirFormulaireReglement(vente) {
+    setVenteReglementOuvert(vente.id);
+    setModeReglement(MODES_PAIEMENT[0]);
+    setMontantReglement(String(vente.montantRestant));
+  }
+
+  function fermerFormulaireReglement() {
+    setVenteReglementOuvert(null);
+    setMontantReglement('');
+  }
+
+  async function validerReglement(venteId) {
+    setCreditErreur('');
+    const montant = Number(montantReglement);
+    if (!montant || montant <= 0) {
+      setCreditErreur('Indiquez un montant valide.');
+      return;
+    }
+    setReglementEnCours(true);
+    try {
+      await appelApi('POST', `/credits/${venteId}/reglements`, { montant, mode: modeReglement });
+      fermerFormulaireReglement();
+      await chargerCredits();
+    } catch (err) {
+      setCreditErreur(err.message);
+    } finally {
+      setReglementEnCours(false);
+    }
+  }
 
   function sauvegarderListeAttente(liste) {
     setVentesEnAttente(liste);
@@ -152,7 +210,7 @@ export default function Ventes() {
     setMotifRemise('');
     setPaiements([]);
     setMontantAAjouter('');
-    setTypeVente('Comptant'); // sécurité : on repart toujours de "Comptant" pour la vente suivante
+    setTypeVente('Comptant');
   }
 
   const totalBrut = panier.reduce((somme, l) => somme + l.prixUnitaire * l.quantite, 0);
@@ -250,10 +308,6 @@ export default function Ventes() {
       setErreurVente('Sélectionnez un vendeur.');
       return;
     }
-
-    // En Comptant : il faut que tout soit payé, pile.
-    // En Crédit : on peut valider avec un paiement partiel, voire aucun paiement.
-    // Dans les deux cas, on ne peut jamais payer plus que le total de la vente.
     if (!estCredit && paiements.length === 0) {
       setErreurVente('Ajoutez au moins un mode de paiement.');
       return;
@@ -315,6 +369,9 @@ export default function Ventes() {
               {onglet.id === 'attente' && ventesEnAttente.length > 0 && (
                 <span style={styles.badgeCompteur}> ({ventesEnAttente.length})</span>
               )}
+              {onglet.id === 'credit' && creditFiltre === 'EN_COURS' && creditVentes.length > 0 && (
+                <span style={styles.badgeCompteur}> ({creditVentes.length})</span>
+              )}
             </div>
           ))}
         </nav>
@@ -356,6 +413,100 @@ export default function Ventes() {
                   </div>
                 );
               })}
+            </div>
+          </>
+        ) : ongletActif === 'credit' ? (
+          <>
+            <h2 style={styles.titreOnglet}>Ventes à crédit</h2>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[
+                { id: 'EN_COURS', label: 'En cours' },
+                { id: 'SOLDE', label: 'Soldées' },
+                { id: 'TOUS', label: 'Toutes' },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setCreditFiltre(f.id)}
+                  style={f.id === creditFiltre ? styles.filtreActif : styles.filtreInactif}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {creditErreur && <div style={styles.bandeauErreur}>{creditErreur}</div>}
+            {creditChargement && <p style={styles.texteMuet}>Chargement…</p>}
+            {!creditChargement && creditVentes.length === 0 && (
+              <p style={styles.texteMuet}>Aucune vente à crédit pour ce filtre.</p>
+            )}
+
+            <div style={styles.listeAttente}>
+              {creditVentes.map((vente) => (
+                <div key={vente.id} style={styles.carteAttente}>
+                  <div style={styles.enTeteCarteAttente}>
+                    <span style={{ fontWeight: 700 }}>
+                      Vente {vente.numero} — {Number(vente.totalNet).toLocaleString('fr-FR')} F
+                    </span>
+                    <span style={styles.texteMuet}>
+                      {new Date(vente.createdAt).toLocaleDateString('fr-FR')}
+                    </span>
+                  </div>
+                  <div style={styles.texteMuet}>
+                    Client : {vente.client ? vente.client.nomComplet : 'Non renseigné'}
+                    {vente.vendeur ? ` — Vendeur : ${vente.vendeur.nomComplet}` : ''}
+                    {vente.lieu ? ` — ${vente.lieu.nom}` : ''}
+                  </div>
+                  <div style={styles.ligneRecap}>
+                    <span>Déjà payé</span>
+                    <span>{Number(vente.totalPaye).toLocaleString('fr-FR')} F</span>
+                  </div>
+                  <div style={{ ...styles.ligneRecap, fontWeight: 700, color: vente.montantRestant > 1 ? 'var(--error)' : '#1E6B36' }}>
+                    <span>{vente.montantRestant > 1 ? 'Reste dû' : 'Soldée'}</span>
+                    <span>{Number(vente.montantRestant).toLocaleString('fr-FR')} F</span>
+                  </div>
+
+                  {vente.montantRestant > 1 && (
+                    venteReglementOuvert === vente.id ? (
+                      <div style={styles.ajoutPaiement}>
+                        <select
+                          style={styles.champInput}
+                          value={modeReglement}
+                          onChange={(e) => setModeReglement(e.target.value)}
+                        >
+                          {MODES_PAIEMENT.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="0"
+                          style={{ ...styles.champInput, minWidth: 100 }}
+                          placeholder="Montant"
+                          value={montantReglement}
+                          onChange={(e) => setMontantReglement(e.target.value)}
+                        />
+                        <button
+                          onClick={() => validerReglement(vente.id)}
+                          disabled={reglementEnCours}
+                          style={styles.boutonAjouterPaiement}
+                        >
+                          {reglementEnCours ? '…' : 'Valider'}
+                        </button>
+                        <button onClick={fermerFormulaireReglement} style={styles.boutonRetirer}>
+                          Annuler
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={styles.boutonsCarteAttente}>
+                        <button onClick={() => ouvrirFormulaireReglement(vente)} style={styles.boutonReprendre}>
+                          Enregistrer un paiement
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
+              ))}
             </div>
           </>
         ) : ongletActif !== 'nouvelle' ? (
@@ -643,4 +794,28 @@ const styles = {
   formRecherche: { display: 'flex', gap: 8, marginBottom: 12 },
   boutonRecherche: { padding: '8px 14px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
   listeResultats: { display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 400, overflowY: 'auto' },
-  itemResultat: { display: 'flex', justifyContent:
+  itemResultat: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--cream-deep)', background: 'transparent', cursor: 'pointer', textAlign: 'left' },
+  ligneAmpanier: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--cream-deep)' },
+  controlesQuantite: { display: 'flex', alignItems: 'center', gap: 6 },
+  boutonQte: { width: 24, height: 24, borderRadius: 6, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer' },
+  boutonRetirer: { border: 'none', background: 'transparent', color: 'var(--error)', cursor: 'pointer', fontSize: 14 },
+  blocRemise: { display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14, paddingTop: 14, borderTop: '1px dashed var(--cream-deep)' },
+  recapTotaux: { marginTop: 12, paddingTop: 12, borderTop: '2px solid var(--gold-mid)' },
+  ligneRecap: { display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--brown-soft)', marginBottom: 4 },
+  totalPanier: { marginTop: 4, fontWeight: 700, fontSize: 16, textAlign: 'right' },
+  ajoutPaiement: { display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' },
+  boutonAjouterPaiement: { padding: '8px 12px', borderRadius: 8, border: 'none', background: 'var(--gold-mid)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 13 },
+  listePaiements: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 },
+  lignePaiement: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6, background: 'var(--cream)', fontSize: 13 },
+  recapPaiement: { marginTop: 4, paddingTop: 10, borderTop: '2px solid var(--gold-mid)' },
+  boutonsAction: { marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12 },
+  boutonAttente: { padding: '10px 14px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer' },
+  boutonValider: { padding: '10px 14px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
+  listeAttente: { display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 600 },
+  carteAttente: { background: 'var(--white)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 6 },
+  enTeteCarteAttente: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  boutonsCarteAttente: { display: 'flex', gap: 8, marginTop: 6 },
+  boutonReprendre: { padding: '6px 12px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 13 },
+  filtreActif: { padding: '6px 14px', borderRadius: 20, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 13 },
+  filtreInactif: { padding: '6px 14px', borderRadius: 20, border: '1px solid var(--cream-deep)', background: 'transparent', cursor: 'pointer', fontSize: 13 },
+};
