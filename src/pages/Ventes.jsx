@@ -64,11 +64,23 @@ export default function Ventes() {
   const [creditVentes, setCreditVentes] = useState([]);
   const [creditChargement, setCreditChargement] = useState(false);
   const [creditErreur, setCreditErreur] = useState('');
-  const [creditFiltre, setCreditFiltre] = useState('EN_COURS'); // EN_COURS | SOLDE | tous
-  const [venteReglementOuvert, setVenteReglementOuvert] = useState(null); // id de la vente en cours de règlement
+  const [creditFiltre, setCreditFiltre] = useState('EN_COURS');
+  const [venteReglementOuvert, setVenteReglementOuvert] = useState(null);
   const [modeReglement, setModeReglement] = useState(MODES_PAIEMENT[0]);
   const [montantReglement, setMontantReglement] = useState('');
   const [reglementEnCours, setReglementEnCours] = useState(false);
+
+  // --- Retours / Échanges (avoirs) ---
+  const [rechercheRetour, setRechercheRetour] = useState('');
+  const [resultatsRetour, setResultatsRetour] = useState([]);
+  const [rechercheRetourEnCours, setRechercheRetourEnCours] = useState(false);
+  const [erreurRechercheRetour, setErreurRechercheRetour] = useState('');
+  const [venteOrigine, setVenteOrigine] = useState(null);
+  const [lignesRetour, setLignesRetour] = useState([]);
+  const [lieuRetourId, setLieuRetourId] = useState('');
+  const [retourEnCours, setRetourEnCours] = useState(false);
+  const [erreurRetour, setErreurRetour] = useState('');
+  const [avoirCree, setAvoirCree] = useState(null);
 
   useEffect(() => {
     appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
@@ -130,6 +142,100 @@ export default function Ventes() {
       setCreditErreur(err.message);
     } finally {
       setReglementEnCours(false);
+    }
+  }
+
+  // --- Retours / Échanges : logique ---
+
+  async function gererRechercheRetour(e) {
+    e.preventDefault();
+    const q = rechercheRetour.trim();
+    if (!q) return;
+    setRechercheRetourEnCours(true);
+    setErreurRechercheRetour('');
+    try {
+      const resultats = await appelApi('GET', `/retours/ventes?q=${encodeURIComponent(q)}`);
+      setResultatsRetour(resultats);
+    } catch (err) {
+      setErreurRechercheRetour(err.message);
+    } finally {
+      setRechercheRetourEnCours(false);
+    }
+  }
+
+  function selectionnerVenteOrigine(vente) {
+    setVenteOrigine(vente);
+    setLieuRetourId(String(vente.lieuId));
+    setLignesRetour(
+      vente.lignes.map((l) => ({
+        articleId: l.articleId,
+        designation: l.article.designation,
+        prixUnitaire: Number(l.prixUnitaire),
+        quantiteVendue: l.quantite,
+        quantiteRetour: 0,
+      }))
+    );
+    setResultatsRetour([]);
+    setRechercheRetour('');
+    setAvoirCree(null);
+    setErreurRetour('');
+  }
+
+  function annulerSelectionRetour() {
+    setVenteOrigine(null);
+    setLignesRetour([]);
+    setErreurRetour('');
+  }
+
+  function changerQuantiteRetour(articleId, quantite) {
+    setLignesRetour((prec) =>
+      prec.map((l) =>
+        l.articleId === articleId
+          ? { ...l, quantiteRetour: Math.max(0, Math.min(quantite, l.quantiteVendue)) }
+          : l
+      )
+    );
+  }
+
+  function changerPrixRetour(articleId, prix) {
+    setLignesRetour((prec) =>
+      prec.map((l) => (l.articleId === articleId ? { ...l, prixUnitaire: Number(prix) || 0 } : l))
+    );
+  }
+
+  const montantAvoirEstime = lignesRetour.reduce(
+    (s, l) => s + l.prixUnitaire * l.quantiteRetour, 0
+  );
+
+  async function validerRetour() {
+    setErreurRetour('');
+    const lignesAEnvoyer = lignesRetour.filter((l) => l.quantiteRetour > 0);
+    if (lignesAEnvoyer.length === 0) {
+      setErreurRetour('Indiquez au moins un article et une quantité à retourner.');
+      return;
+    }
+    if (!lieuRetourId) {
+      setErreurRetour("Sélectionnez la boutique où l'article revient en stock.");
+      return;
+    }
+    setRetourEnCours(true);
+    try {
+      const avoir = await appelApi('POST', '/retours', {
+        venteOrigineId: venteOrigine.id,
+        lieuId: Number(lieuRetourId),
+        lignes: lignesAEnvoyer.map((l) => ({
+          articleId: l.articleId,
+          quantite: l.quantiteRetour,
+          prixUnitaire: l.prixUnitaire,
+        })),
+      });
+      setAvoirCree(avoir);
+      setVenteOrigine(null);
+      setLignesRetour([]);
+    } catch (err) {
+      setErreurRetour(err.message);
+    } finally {
+      setRetourEnCours(false);
     }
   }
 
@@ -508,6 +614,129 @@ export default function Ventes() {
                 </div>
               ))}
             </div>
+          </>
+        ) : ongletActif === 'retours' ? (
+          <>
+            <h2 style={styles.titreOnglet}>Retours / Échanges</h2>
+
+            {avoirCree && (
+              <div style={styles.bandeauConfirmation}>
+                ✅ Avoir {avoirCree.reference} créé — {Number(avoirCree.montant).toLocaleString('fr-FR')} F.
+                Le client pourra l'utiliser lors d'un prochain achat avec ce code : {avoirCree.reference}
+              </div>
+            )}
+            {erreurRetour && <div style={styles.bandeauErreur}>{erreurRetour}</div>}
+
+            {!venteOrigine ? (
+              <>
+                <form onSubmit={gererRechercheRetour} style={styles.formRecherche}>
+                  <input
+                    autoFocus
+                    style={styles.champInput}
+                    placeholder="Numéro de vente, nom ou téléphone du client…"
+                    value={rechercheRetour}
+                    onChange={(e) => setRechercheRetour(e.target.value)}
+                  />
+                  <button type="submit" style={styles.boutonRecherche} disabled={rechercheRetourEnCours}>
+                    {rechercheRetourEnCours ? '…' : 'Chercher'}
+                  </button>
+                </form>
+
+                {erreurRechercheRetour && <p style={{ color: 'var(--error)', fontSize: 13 }}>{erreurRechercheRetour}</p>}
+
+                {resultatsRetour.length > 0 && (
+                  <div style={styles.listeAttente}>
+                    {resultatsRetour.map((vente) => (
+                      <div key={vente.id} style={styles.carteAttente}>
+                        <div style={styles.enTeteCarteAttente}>
+                          <span style={{ fontWeight: 700 }}>
+                            Vente {vente.numero} — {Number(vente.totalNet).toLocaleString('fr-FR')} F
+                          </span>
+                          <span style={styles.texteMuet}>
+                            {new Date(vente.createdAt).toLocaleDateString('fr-FR')}
+                          </span>
+                        </div>
+                        <div style={styles.texteMuet}>
+                          Client : {vente.client ? vente.client.nomComplet : 'Non renseigné'} — {vente.lieu.nom}
+                        </div>
+                        <div style={styles.texteMuet}>
+                          {vente.lignes.map((l) => `${l.article.designation} ×${l.quantite}`).join(', ')}
+                        </div>
+                        <div style={styles.boutonsCarteAttente}>
+                          <button onClick={() => selectionnerVenteOrigine(vente)} style={styles.boutonReprendre}>
+                            Sélectionner
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {resultatsRetour.length === 0 && !erreurRechercheRetour && (
+                  <p style={styles.texteMuet}>Recherchez la vente d'origine du client pour commencer un retour.</p>
+                )}
+              </>
+            ) : (
+              <>
+                <div style={styles.carteAttente}>
+                  <div style={styles.enTeteCarteAttente}>
+                    <span style={{ fontWeight: 700 }}>Vente {venteOrigine.numero}</span>
+                    <button onClick={annulerSelectionRetour} style={styles.boutonRetirer}>✕ Changer de vente</button>
+                  </div>
+                  <div style={styles.texteMuet}>
+                    Client : {venteOrigine.client ? venteOrigine.client.nomComplet : 'Non renseigné'}
+                  </div>
+                </div>
+
+                <label style={styles.champLabel}>
+                  Boutique de retour (où l'article revient en stock)
+                  <select style={styles.champInput} value={lieuRetourId} onChange={(e) => setLieuRetourId(e.target.value)}>
+                    <option value="">—</option>
+                    {lieux.map((l) => (
+                      <option key={l.id} value={l.id}>{l.nom}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div style={styles.colonnePanier}>
+                  <h3 style={styles.titreBloc}>Articles à retourner</h3>
+                  {lignesRetour.map((ligne) => (
+                    <div key={ligne.articleId} style={styles.ligneAmpanier}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{ligne.designation}</div>
+                        <div style={{ fontSize: 12, color: 'var(--brown-soft)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          Acheté ×{ligne.quantiteVendue} — Valeur unitaire :
+                          <input
+                            type="number"
+                            min="0"
+                            value={ligne.prixUnitaire}
+                            onChange={(e) => changerPrixRetour(ligne.articleId, e.target.value)}
+                            style={{ ...styles.champInput, minWidth: 80, padding: '4px 6px' }}
+                          />
+                          F
+                        </div>
+                      </div>
+                      <div style={styles.controlesQuantite}>
+                        <button onClick={() => changerQuantiteRetour(ligne.articleId, ligne.quantiteRetour - 1)} style={styles.boutonQte}>−</button>
+                        <span>{ligne.quantiteRetour}</span>
+                        <button onClick={() => changerQuantiteRetour(ligne.articleId, ligne.quantiteRetour + 1)} style={styles.boutonQte}>+</button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div style={styles.recapTotaux}>
+                    <div style={styles.totalPanier}>
+                      Valeur de l'avoir : {montantAvoirEstime.toLocaleString('fr-FR')} F
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.boutonsAction}>
+                  <button onClick={validerRetour} disabled={retourEnCours} style={styles.boutonValider}>
+                    {retourEnCours ? 'Création…' : "Créer l'avoir"}
+                  </button>
+                </div>
+              </>
+            )}
           </>
         ) : ongletActif !== 'nouvelle' ? (
           <p style={styles.texteMuet}>Cet écran arrive dans une prochaine session.</p>
