@@ -68,9 +68,6 @@ export default function Ventes() {
     setVentesEnAttente(chargerVentesEnAttente());
   }, []);
 
-  // Les caissières ne choisissent pas la boutique : elle est fixée automatiquement sur
-  // le premier point de vente (type BOUTIQUE) dès que la liste des lieux est chargée.
-  // Seule Victoria (rôle ADMIN) peut la changer via le sélecteur.
   useEffect(() => {
     if (!estAdmin && !lieuId && lieux.length > 0) {
       const boutique = lieux.find((l) => l.type === 'BOUTIQUE') || lieux[0];
@@ -155,6 +152,7 @@ export default function Ventes() {
     setMotifRemise('');
     setPaiements([]);
     setMontantAAjouter('');
+    setTypeVente('Comptant'); // sécurité : on repart toujours de "Comptant" pour la vente suivante
   }
 
   const totalBrut = panier.reduce((somme, l) => somme + l.prixUnitaire * l.quantite, 0);
@@ -162,10 +160,8 @@ export default function Ventes() {
   const totalNet = totalBrut - remise;
   const totalPaiements = paiements.reduce((s, p) => s + p.montant, 0);
   const resteAPayer = totalNet - totalPaiements;
+  const estCredit = typeVente === 'Crédit';
 
-  // Pré-remplit le montant à ajouter avec le solde restant à chaque changement du solde,
-  // pour que l'usage courant (payer en un seul mode) se fasse en un clic sur "Ajouter",
-  // tout en restant éditable pour un paiement mixte (on baisse le montant avant d'ajouter).
   useEffect(() => {
     if (panier.length > 0 && resteAPayer > 0) {
       setMontantAAjouter(String(resteAPayer));
@@ -174,14 +170,10 @@ export default function Ventes() {
     }
   }, [resteAPayer, panier.length]);
 
-  // Diffuse l'état courant du panier vers l'écran client à chaque changement, pour
-  // que le double écran caisse reste synchronisé en temps réel.
   useEffect(() => {
     diffuserEtatPanier({ panier, remise });
   }, [panier, remise]);
 
-  // Répond immédiatement quand l'écran client demande l'état (à son ouverture),
-  // car BroadcastChannel ne transmet pas les messages passés.
   useEffect(() => {
     return ecouterCanal((message) => {
       if (message.type === 'DEMANDE_ETAT') {
@@ -258,16 +250,20 @@ export default function Ventes() {
       setErreurVente('Sélectionnez un vendeur.');
       return;
     }
-    if (paiements.length === 0) {
+
+    // En Comptant : il faut que tout soit payé, pile.
+    // En Crédit : on peut valider avec un paiement partiel, voire aucun paiement.
+    // Dans les deux cas, on ne peut jamais payer plus que le total de la vente.
+    if (!estCredit && paiements.length === 0) {
       setErreurVente('Ajoutez au moins un mode de paiement.');
       return;
     }
-    if (Math.abs(resteAPayer) > 1) {
-      setErreurVente(
-        resteAPayer > 0
-          ? `Il reste ${resteAPayer.toLocaleString('fr-FR')} F à couvrir.`
-          : `Le total des paiements dépasse le montant de ${Math.abs(resteAPayer).toLocaleString('fr-FR')} F.`
-      );
+    if (resteAPayer < -1) {
+      setErreurVente(`Le total des paiements dépasse le montant de ${Math.abs(resteAPayer).toLocaleString('fr-FR')} F.`);
+      return;
+    }
+    if (!estCredit && resteAPayer > 1) {
+      setErreurVente(`Il reste ${resteAPayer.toLocaleString('fr-FR')} F à couvrir.`);
       return;
     }
 
@@ -276,6 +272,7 @@ export default function Ventes() {
       const vente = await appelApi('POST', '/ventes', {
         lieuId: Number(lieuId),
         vendeurId: vendeurId ? Number(vendeurId) : null,
+        typeVente: estCredit ? 'CREDIT' : 'COMPTANT',
         remiseMontant: remise > 0 ? remise : undefined,
         motifRemise: motifRemise || undefined,
         lignes: panier.map((l) => ({
@@ -285,7 +282,7 @@ export default function Ventes() {
         })),
         paiements: paiements.map((p) => ({ mode: p.mode, montant: p.montant })),
       });
-      setConfirmation(vente);
+      setConfirmation({ ...vente, montantRestantAffiche: estCredit ? resteAPayer : 0 });
       diffuserVenteValidee(vente);
       reinitialiserVente();
     } catch (err) {
@@ -412,6 +409,9 @@ export default function Ventes() {
             {confirmation && (
               <div style={styles.bandeauConfirmation}>
                 ✅ Vente {confirmation.numero} enregistrée — {Number(confirmation.totalNet).toLocaleString('fr-FR')} F
+                {confirmation.montantRestantAffiche > 1 && (
+                  <> — reste dû (crédit) : {confirmation.montantRestantAffiche.toLocaleString('fr-FR')} F</>
+                )}
               </div>
             )}
             {erreurVente && <div style={styles.bandeauErreur}>{erreurVente}</div>}
@@ -529,6 +529,12 @@ export default function Ventes() {
               <div style={styles.colonnePaiement}>
                 <h3 style={styles.titreBloc}>Paiement</h3>
 
+                {estCredit && (
+                  <p style={{ ...styles.texteMuet, marginTop: 0 }}>
+                    Vente à crédit : le paiement est optionnel. Ce qui n'est pas payé maintenant sera à régler plus tard, dans l'onglet "Ventes à crédit".
+                  </p>
+                )}
+
                 <div style={styles.ajoutPaiement}>
                   <select
                     style={styles.champInput}
@@ -574,10 +580,14 @@ export default function Ventes() {
                       style={{
                         ...styles.ligneRecap,
                         fontWeight: 700,
-                        color: Math.abs(resteAPayer) <= 1 ? '#1E6B36' : 'var(--error)',
+                        color: Math.abs(resteAPayer) <= 1 ? '#1E6B36' : (estCredit ? 'var(--brown-ink)' : 'var(--error)'),
                       }}
                     >
-                      <span>{resteAPayer > 1 ? 'Reste à payer' : resteAPayer < -1 ? 'Excédent' : 'Complet'}</span>
+                      <span>
+                        {resteAPayer > 1
+                          ? (estCredit ? 'Restera dû (crédit)' : 'Reste à payer')
+                          : resteAPayer < -1 ? 'Excédent' : 'Complet'}
+                      </span>
                       <span>{resteAPayer.toLocaleString('fr-FR')} F</span>
                     </div>
                   </div>
@@ -633,26 +643,4 @@ const styles = {
   formRecherche: { display: 'flex', gap: 8, marginBottom: 12 },
   boutonRecherche: { padding: '8px 14px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
   listeResultats: { display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 400, overflowY: 'auto' },
-  itemResultat: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--cream-deep)', background: 'transparent', cursor: 'pointer', textAlign: 'left' },
-  ligneAmpanier: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--cream-deep)' },
-  controlesQuantite: { display: 'flex', alignItems: 'center', gap: 6 },
-  boutonQte: { width: 24, height: 24, borderRadius: 6, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer' },
-  boutonRetirer: { border: 'none', background: 'transparent', color: 'var(--error)', cursor: 'pointer', fontSize: 14 },
-  blocRemise: { display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14, paddingTop: 14, borderTop: '1px dashed var(--cream-deep)' },
-  recapTotaux: { marginTop: 12, paddingTop: 12, borderTop: '2px solid var(--gold-mid)' },
-  ligneRecap: { display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--brown-soft)', marginBottom: 4 },
-  totalPanier: { marginTop: 4, fontWeight: 700, fontSize: 16, textAlign: 'right' },
-  ajoutPaiement: { display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' },
-  boutonAjouterPaiement: { padding: '8px 12px', borderRadius: 8, border: 'none', background: 'var(--gold-mid)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 13 },
-  listePaiements: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 },
-  lignePaiement: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6, background: 'var(--cream)', fontSize: 13 },
-  recapPaiement: { marginTop: 4, paddingTop: 10, borderTop: '2px solid var(--gold-mid)' },
-  boutonsAction: { marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12 },
-  boutonAttente: { padding: '10px 14px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer' },
-  boutonValider: { padding: '10px 14px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
-  listeAttente: { display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 600 },
-  carteAttente: { background: 'var(--white)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 6 },
-  enTeteCarteAttente: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  boutonsCarteAttente: { display: 'flex', gap: 8, marginTop: 6 },
-  boutonReprendre: { padding: '6px 12px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 13 },
-};
+  itemResultat: { display: 'flex', justifyContent:
