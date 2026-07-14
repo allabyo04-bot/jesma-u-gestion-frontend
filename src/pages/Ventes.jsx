@@ -54,6 +54,12 @@ export default function Ventes() {
   const [modeAAjouter, setModeAAjouter] = useState(MODES_PAIEMENT[0]);
   const [montantAAjouter, setMontantAAjouter] = useState('');
 
+  // --- Avoir utilisé en paiement sur la nouvelle vente ---
+  const [codeAvoir, setCodeAvoir] = useState('');
+  const [avoirVerifie, setAvoirVerifie] = useState(null); // { reference, montant, statut, ... }
+  const [avoirVerificationEnCours, setAvoirVerificationEnCours] = useState(false);
+  const [erreurAvoir, setErreurAvoir] = useState('');
+
   const [venteEnCours, setVenteEnCours] = useState(false);
   const [erreurVente, setErreurVente] = useState('');
   const [confirmation, setConfirmation] = useState(null);
@@ -143,6 +149,35 @@ export default function Ventes() {
     } finally {
       setReglementEnCours(false);
     }
+  }
+
+  // --- Avoir en paiement : vérification ---
+
+  async function verifierAvoir() {
+    const code = codeAvoir.trim();
+    if (!code) return;
+    setErreurAvoir('');
+    setAvoirVerificationEnCours(true);
+    try {
+      const avoir = await appelApi('GET', `/avoirs/${encodeURIComponent(code)}`);
+      if (avoir.statut !== 'ACTIF') {
+        setErreurAvoir('Cet avoir a déjà été utilisé.');
+        setAvoirVerifie(null);
+      } else {
+        setAvoirVerifie(avoir);
+      }
+    } catch (err) {
+      setErreurAvoir(err.message);
+      setAvoirVerifie(null);
+    } finally {
+      setAvoirVerificationEnCours(false);
+    }
+  }
+
+  function retirerAvoir() {
+    setCodeAvoir('');
+    setAvoirVerifie(null);
+    setErreurAvoir('');
   }
 
   // --- Retours / Échanges : logique ---
@@ -317,13 +352,15 @@ export default function Ventes() {
     setPaiements([]);
     setMontantAAjouter('');
     setTypeVente('Comptant');
+    retirerAvoir();
   }
 
   const totalBrut = panier.reduce((somme, l) => somme + l.prixUnitaire * l.quantite, 0);
   const remise = Math.min(Number(remiseMontant) || 0, totalBrut);
   const totalNet = totalBrut - remise;
   const totalPaiements = paiements.reduce((s, p) => s + p.montant, 0);
-  const resteAPayer = totalNet - totalPaiements;
+  const contributionAvoir = avoirVerifie ? Math.min(Number(avoirVerifie.montant), totalNet) : 0;
+  const resteAPayer = totalNet - totalPaiements - contributionAvoir;
   const estCredit = typeVente === 'Crédit';
 
   useEffect(() => {
@@ -414,7 +451,7 @@ export default function Ventes() {
       setErreurVente('Sélectionnez un vendeur.');
       return;
     }
-    if (!estCredit && paiements.length === 0) {
+    if (!estCredit && paiements.length === 0 && contributionAvoir === 0) {
       setErreurVente('Ajoutez au moins un mode de paiement.');
       return;
     }
@@ -435,6 +472,7 @@ export default function Ventes() {
         typeVente: estCredit ? 'CREDIT' : 'COMPTANT',
         remiseMontant: remise > 0 ? remise : undefined,
         motifRemise: motifRemise || undefined,
+        avoirCode: avoirVerifie ? avoirVerifie.reference : undefined,
         lignes: panier.map((l) => ({
           articleId: l.articleId,
           quantite: l.quantite,
@@ -779,11 +817,42 @@ export default function Ventes() {
               </div>
             </div>
 
-            <div style={styles.blocClient}>
-              <label style={styles.champLabel}>
-                Client
-                <input style={styles.champInput} placeholder="Rechercher un client…" />
-              </label>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+              <div style={styles.blocClient}>
+                <label style={styles.champLabel}>
+                  Client
+                  <input style={styles.champInput} placeholder="Rechercher un client…" />
+                </label>
+              </div>
+
+              <div style={{ maxWidth: 340 }}>
+                <label style={styles.champLabel}>
+                  Code avoir (optionnel)
+                  {!avoirVerifie ? (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        style={styles.champInput}
+                        placeholder="Ex: AV-1234567890"
+                        value={codeAvoir}
+                        onChange={(e) => setCodeAvoir(e.target.value)}
+                      />
+                      <button
+                        onClick={verifierAvoir}
+                        disabled={avoirVerificationEnCours || !codeAvoir.trim()}
+                        style={styles.boutonAjouterPaiement}
+                      >
+                        {avoirVerificationEnCours ? '…' : 'Vérifier'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ ...styles.lignePaiement, background: '#DFF3E3' }}>
+                      <span>Avoir {avoirVerifie.reference} — {Number(avoirVerifie.montant).toLocaleString('fr-FR')} F</span>
+                      <button onClick={retirerAvoir} style={styles.boutonRetirer}>✕</button>
+                    </div>
+                  )}
+                </label>
+                {erreurAvoir && <p style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>{erreurAvoir}</p>}
+              </div>
             </div>
 
             {confirmation && (
@@ -915,6 +984,13 @@ export default function Ventes() {
                   </p>
                 )}
 
+                {avoirVerifie && (
+                  <div style={styles.ligneRecap}>
+                    <span>Avoir appliqué</span>
+                    <span>−{contributionAvoir.toLocaleString('fr-FR')} F</span>
+                  </div>
+                )}
+
                 <div style={styles.ajoutPaiement}>
                   <select
                     style={styles.champInput}
@@ -954,7 +1030,7 @@ export default function Ventes() {
                   <div style={styles.recapPaiement}>
                     <div style={styles.ligneRecap}>
                       <span>Total payé</span>
-                      <span>{totalPaiements.toLocaleString('fr-FR')} F</span>
+                      <span>{(totalPaiements + contributionAvoir).toLocaleString('fr-FR')} F</span>
                     </div>
                     <div
                       style={{
@@ -1008,7 +1084,7 @@ const styles = {
   enTeteVente: { display: 'flex', gap: 24, flexWrap: 'wrap' },
   blocBoutiqueVendeur: { display: 'flex', gap: 12 },
   blocModeVente: { display: 'flex', gap: 12 },
-  blocClient: { maxWidth: 400 },
+  blocClient: { maxWidth: 340 },
   champLabel: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600 },
   texteVerrouille: { fontWeight: 400, fontSize: 11, color: 'var(--brown-soft)' },
   champInput: { padding: '8px 10px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14, minWidth: 160 },
