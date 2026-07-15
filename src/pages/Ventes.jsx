@@ -912,22 +912,33 @@ export default function Ventes() {
               <div style={styles.colonnePanier}>
                 <h3 style={styles.titreBloc}>Panier</h3>
                 {panier.length === 0 && <p style={styles.texteMuet}>Aucun article ajouté.</p>}
-                {panier.map((ligne) => (
-                  <div key={ligne.articleId} style={styles.ligneAmpanier}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{ligne.designation}</div>
-                      <div style={{ fontSize: 12, color: 'var(--brown-soft)' }}>
-                        {ligne.prixUnitaire.toLocaleString('fr-FR')} F × {ligne.quantite}
+                {panier.map((ligne) => {
+                  const stockRestant = ligne.stockDispo != null ? ligne.stockDispo - ligne.quantite : null;
+                  return (
+                    <div key={ligne.articleId} style={styles.ligneAmpanier}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{ligne.designation}</div>
+                        <div style={{ fontSize: 12, color: 'var(--brown-soft)' }}>
+                          {ligne.prixUnitaire.toLocaleString('fr-FR')} F × {ligne.quantite}
+                        </div>
+                        {stockRestant !== null && (
+                          <div style={{
+                            ...styles.badgeStock,
+                            color: stockRestant <= 0 ? 'var(--error)' : 'var(--brown-soft)',
+                          }}>
+                            Stock restant : {stockRestant}
+                          </div>
+                        )}
                       </div>
+                      <div style={styles.controlesQuantite}>
+                        <button onClick={() => changerQuantite(ligne.articleId, -1)} style={styles.boutonQte}>−</button>
+                        <span>{ligne.quantite}</span>
+                        <button onClick={() => changerQuantite(ligne.articleId, 1)} style={styles.boutonQte}>+</button>
+                      </div>
+                      <button onClick={() => retirerDuPanier(ligne.articleId)} style={styles.boutonRetirer}>✕</button>
                     </div>
-                    <div style={styles.controlesQuantite}>
-                      <button onClick={() => changerQuantite(ligne.articleId, -1)} style={styles.boutonQte}>−</button>
-                      <span>{ligne.quantite}</span>
-                      <button onClick={() => changerQuantite(ligne.articleId, 1)} style={styles.boutonQte}>+</button>
-                    </div>
-                    <button onClick={() => retirerDuPanier(ligne.articleId)} style={styles.boutonRetirer}>✕</button>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {panier.length > 0 && (
                   <>
@@ -1123,4 +1134,5 @@ const styles = {
   boutonReprendre: { padding: '6px 12px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 13 },
   filtreActif: { padding: '6px 14px', borderRadius: 20, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 13 },
   filtreInactif: { padding: '6px 14px', borderRadius: 20, border: '1px solid var(--cream-deep)', background: 'transparent', cursor: 'pointer', fontSize: 13 },
+  badgeStock: { fontSize: 11, marginTop: 2, fontWeight: 600 },
 };
