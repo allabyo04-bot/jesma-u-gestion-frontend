@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { appelApi, uploaderPhotoArticle } from '../lib/api';
 
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://jesma-u-gestion-backend-production.up.railway.app/api';
+
 export default function Articles() {
   const navigate = useNavigate();
   const [articles, setArticles] = useState([]);
@@ -9,6 +11,7 @@ export default function Articles() {
   const [erreur, setErreur] = useState('');
   const [chargement, setChargement] = useState(true);
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
+  const [nombreAImprimer, setNombreAImprimer] = useState(0);
 
   useEffect(() => {
     Promise.all([appelApi('GET', '/articles'), appelApi('GET', '/familles')])
@@ -18,7 +21,14 @@ export default function Articles() {
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false));
+    rafraichirCompteurImpression();
   }, []);
+
+  function rafraichirCompteurImpression() {
+    appelApi('GET', '/articles/a-imprimer')
+      .then((liste) => setNombreAImprimer(liste.length))
+      .catch(() => {});
+  }
 
   function ajouterArticleALaListe(article) {
     setArticles((prec) => [article, ...prec]);
@@ -26,6 +36,16 @@ export default function Articles() {
 
   function mettreAJourArticle(article) {
     setArticles((prec) => prec.map((a) => (a.id === article.id ? article : a)));
+    rafraichirCompteurImpression();
+  }
+
+  function ouvrirImpressionEtiquettes() {
+    // Le token doit être transmis car cette route est protégée ; on ne peut pas juste
+    // ouvrir l'URL directement dans un nouvel onglet (pas d'en-tête Authorization possible
+    // sur une simple navigation), donc on récupère le HTML nous-mêmes et on l'affiche.
+    appelApi('GET', '/articles/a-imprimer/etiquettes-html')
+      .catch(() => null); // ignorée : voir bouton ci-dessous, approche directe par fenêtre
+    window.open(`${BASE_URL}/articles/a-imprimer/etiquettes`, '_blank');
   }
 
   return (
@@ -35,9 +55,16 @@ export default function Articles() {
           ← Tableau de bord
         </button>
         <h1 style={styles.titre}>Articles</h1>
-        <button onClick={() => setFormulaireOuvert(true)} style={styles.boutonAjouter}>
-          + Nouvel article
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {nombreAImprimer > 0 && (
+            <button onClick={ouvrirImpressionEtiquettes} style={styles.boutonImprimer}>
+              🖨️ Étiquettes à imprimer ({nombreAImprimer})
+            </button>
+          )}
+          <button onClick={() => setFormulaireOuvert(true)} style={styles.boutonAjouter}>
+            + Nouvel article
+          </button>
+        </div>
       </div>
 
       {erreur && <p style={{ color: 'var(--error)' }}>{erreur}</p>}
@@ -46,7 +73,12 @@ export default function Articles() {
       {!chargement && (
         <div style={styles.grille}>
           {articles.map((article) => (
-            <CarteArticle key={article.id} article={article} onPhotoMiseAJour={mettreAJourArticle} />
+            <CarteArticle
+              key={article.id}
+              article={article}
+              onPhotoMiseAJour={mettreAJourArticle}
+              onCodeBarreGenere={mettreAJourArticle}
+            />
           ))}
           {articles.length === 0 && <p>Aucun article pour l'instant.</p>}
         </div>
@@ -66,9 +98,11 @@ export default function Articles() {
   );
 }
 
-function CarteArticle({ article, onPhotoMiseAJour }) {
+function CarteArticle({ article, onPhotoMiseAJour, onCodeBarreGenere }) {
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [erreurPhoto, setErreurPhoto] = useState('');
+  const [generationEnCours, setGenerationEnCours] = useState(false);
+  const [erreurGeneration, setErreurGeneration] = useState('');
 
   async function gererChangementPhoto(e) {
     const fichier = e.target.files[0];
@@ -82,6 +116,19 @@ function CarteArticle({ article, onPhotoMiseAJour }) {
       setErreurPhoto(err.message);
     } finally {
       setEnvoiEnCours(false);
+    }
+  }
+
+  async function genererCodeBarre() {
+    setGenerationEnCours(true);
+    setErreurGeneration('');
+    try {
+      const articleMisAJour = await appelApi('POST', `/articles/${article.id}/generer-code-barre`);
+      onCodeBarreGenere(articleMisAJour);
+    } catch (err) {
+      setErreurGeneration(err.message);
+    } finally {
+      setGenerationEnCours(false);
     }
   }
 
@@ -113,6 +160,16 @@ function CarteArticle({ article, onPhotoMiseAJour }) {
             <span style={styles.badgeAlerte}> ⚠ faible</span>
           )}
         </div>
+        {article.codeBarre ? (
+          <div style={styles.codeBarreTexte}>
+            {article.codeBarre}{article.codeBarreGenere ? ' (généré)' : ''}
+          </div>
+        ) : (
+          <button onClick={genererCodeBarre} disabled={generationEnCours} style={styles.boutonGenerer}>
+            {generationEnCours ? 'Génération…' : 'Générer un code-barre'}
+          </button>
+        )}
+        {erreurGeneration && <p style={{ color: 'var(--error)', fontSize: 11, margin: '4px 0 0' }}>{erreurGeneration}</p>}
       </div>
       {erreurPhoto && <p style={{ color: 'var(--error)', fontSize: 12, padding: '0 12px 12px' }}>{erreurPhoto}</p>}
     </div>
@@ -122,6 +179,8 @@ function CarteArticle({ article, onPhotoMiseAJour }) {
 function FormulaireArticle({ familles, onFermer, onCree }) {
   const [designation, setDesignation] = useState('');
   const [reference, setReference] = useState('');
+  const [codeBarre, setCodeBarre] = useState('');
+  const [codeInterne, setCodeInterne] = useState('');
   const [familleId, setFamilleId] = useState('');
   const [sousFamilleId, setSousFamilleId] = useState('');
   const [prixAchat, setPrixAchat] = useState('');
@@ -146,6 +205,8 @@ function FormulaireArticle({ familles, onFermer, onCree }) {
     try {
       const article = await appelApi('POST', '/articles', {
         reference,
+        codeBarre: codeBarre.trim() || undefined,
+        codeInterne: codeInterne.trim() || undefined,
         designation,
         familleId: familleId || null,
         sousFamilleId: sousFamilleId || null,
@@ -176,6 +237,27 @@ function FormulaireArticle({ familles, onFermer, onCree }) {
         <label style={styles.champLabel}>
           Référence *
           <input style={styles.champInput} value={reference} onChange={(e) => setReference(e.target.value)} />
+        </label>
+
+        <label style={styles.champLabel}>
+          Code-barre
+          <input
+            autoFocus={false}
+            style={styles.champInput}
+            placeholder="Scanner ou laisser vide (généré plus tard)"
+            value={codeBarre}
+            onChange={(e) => setCodeBarre(e.target.value)}
+          />
+        </label>
+
+        <label style={styles.champLabel}>
+          Code article (interne)
+          <input
+            style={styles.champInput}
+            placeholder="Optionnel"
+            value={codeInterne}
+            onChange={(e) => setCodeInterne(e.target.value)}
+          />
         </label>
 
         <label style={styles.champLabel}>
@@ -239,6 +321,7 @@ const styles = {
   boutonRetour: { padding: '8px 14px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer', color: 'var(--brown-ink)' },
   titre: { fontFamily: 'var(--font-display)', margin: 0, fontSize: 28 },
   boutonAjouter: { padding: '10px 18px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
+  boutonImprimer: { padding: '10px 18px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', color: 'var(--brown-ink)', cursor: 'pointer', fontWeight: 600 },
   grille: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 20 },
   carte: { background: 'var(--white)', borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 8px rgba(74,44,23,0.12)' },
   zonePhoto: { display: 'block', cursor: 'pointer', aspectRatio: '1 / 1', background: 'var(--cream-deep)' },
@@ -250,6 +333,8 @@ const styles = {
   prix: { fontSize: 16, fontWeight: 700, color: 'var(--gold-deep)', marginBottom: 4 },
   stock: { fontSize: 12, color: 'var(--brown-soft)' },
   badgeAlerte: { color: 'var(--error)', fontWeight: 600 },
+  codeBarreTexte: { fontSize: 11, color: 'var(--brown-soft)', marginTop: 6, fontFamily: 'monospace' },
+  boutonGenerer: { marginTop: 6, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--gold-mid)', background: 'transparent', color: 'var(--brown-ink)', cursor: 'pointer', fontSize: 11 },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(46,26,13,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100 },
   formulaire: { background: 'var(--white)', borderRadius: 16, padding: 28, width: '100%', maxWidth: 420, maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 },
   titreFormulaire: { fontFamily: 'var(--font-display)', margin: 0, marginBottom: 8 },
