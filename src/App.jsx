@@ -8,6 +8,7 @@ import Stock from './pages/Stock.jsx';
 import CartesCadeaux from './pages/CartesCadeaux.jsx';
 import ListesCadeaux from './pages/ListesCadeaux.jsx';
 import ListeCadeauPublique from './pages/ListeCadeauPublique.jsx';
+import Etats from './pages/Etats.jsx';
 
 function estConnecte() {
   return !!localStorage.getItem('jesma_token');
@@ -50,6 +51,14 @@ export default function App() {
         element={
           <RouteProtegee>
             <Stock />
+          </RouteProtegee>
+        }
+      />
+      <Route
+        path="/etats"
+        element={
+          <RouteProtegee>
+            <Etats />
           </RouteProtegee>
         }
       />
