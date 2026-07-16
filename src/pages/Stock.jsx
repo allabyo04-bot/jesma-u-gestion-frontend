@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { appelApi } from '../lib/api';
 
 const SOUS_ONGLETS = [
+  { id: 'reception', label: 'Réception' },
   { id: 'transferts', label: 'Transferts' },
   { id: 'historique', label: 'Historique des mouvements' },
   { id: 'etat', label: 'État du stock' },
@@ -25,7 +26,7 @@ function genererReferenceTransfert() {
 
 export default function Stock() {
   const navigate = useNavigate();
-  const [ongletActif, setOngletActif] = useState('transferts');
+  const [ongletActif, setOngletActif] = useState('reception');
   const [lieux, setLieux] = useState([]);
   const [articles, setArticles] = useState([]);
 
@@ -55,10 +56,237 @@ export default function Stock() {
         ))}
       </div>
 
+      {ongletActif === 'reception' && <OngletReception lieux={lieux} articles={articles} />}
       {ongletActif === 'transferts' && <OngletTransferts lieux={lieux} articles={articles} />}
       {ongletActif === 'historique' && <OngletHistorique articles={articles} lieux={lieux} />}
       {ongletActif === 'etat' && <OngletEtatStock lieux={lieux} />}
       {ongletActif === 'etat-global' && <OngletEtatGlobal lieux={lieux} articles={articles} />}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
+// ONGLET RÉCEPTION (entrée initiale de marchandise)
+// ------------------------------------------------------------
+function OngletReception({ lieux, articles }) {
+  const [lieuId, setLieuId] = useState('');
+  const [fournisseur, setFournisseur] = useState('');
+  const [reference, setReference] = useState('');
+  const [lignes, setLignes] = useState([]);
+  const [articleAAjouter, setArticleAAjouter] = useState('');
+  const [quantiteAAjouter, setQuantiteAAjouter] = useState('1');
+  const [prixAchatAAjouter, setPrixAchatAAjouter] = useState('');
+  const [notes, setNotes] = useState('');
+  const [erreur, setErreur] = useState('');
+  const [succes, setSucces] = useState('');
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [receptions, setReceptions] = useState([]);
+  const [chargementListe, setChargementListe] = useState(true);
+
+  useEffect(() => {
+    chargerReceptions();
+  }, []);
+
+  function chargerReceptions() {
+    setChargementListe(true);
+    appelApi('GET', '/stock/receptions')
+      .then(setReceptions)
+      .catch(() => {})
+      .finally(() => setChargementListe(false));
+  }
+
+  function gererChoixArticle(id) {
+    setArticleAAjouter(id);
+    const article = articles.find((a) => a.id === Number(id));
+    // Pré-remplit avec le dernier prix d'achat connu, modifiable si le fournisseur a changé son prix.
+    setPrixAchatAAjouter(article ? String(article.prixAchat ?? '') : '');
+  }
+
+  function ajouterLigne() {
+    if (!articleAAjouter || !quantiteAAjouter || Number(quantiteAAjouter) <= 0) return;
+    const article = articles.find((a) => a.id === Number(articleAAjouter));
+    if (!article) return;
+    setLignes((prec) => {
+      const existant = prec.find((l) => l.articleId === article.id);
+      if (existant) {
+        return prec.map((l) =>
+          l.articleId === article.id ? { ...l, quantite: l.quantite + Number(quantiteAAjouter) } : l
+        );
+      }
+      return [
+        ...prec,
+        {
+          articleId: article.id,
+          designation: article.designation,
+          quantite: Number(quantiteAAjouter),
+          prixAchat: Number(prixAchatAAjouter) || 0,
+        },
+      ];
+    });
+    setArticleAAjouter('');
+    setQuantiteAAjouter('1');
+    setPrixAchatAAjouter('');
+  }
+
+  function retirerLigne(articleId) {
+    setLignes((prec) => prec.filter((l) => l.articleId !== articleId));
+  }
+
+  async function validerReception() {
+    setErreur('');
+    setSucces('');
+    if (!lieuId) {
+      setErreur('Sélectionnez le lieu qui reçoit la marchandise.');
+      return;
+    }
+    if (lignes.length === 0) {
+      setErreur('Ajoutez au moins un article reçu.');
+      return;
+    }
+
+    setEnvoiEnCours(true);
+    try {
+      await appelApi('POST', '/stock/receptions', {
+        lieuId: Number(lieuId),
+        fournisseur: fournisseur.trim() || undefined,
+        reference: reference.trim() || undefined,
+        notes: notes || undefined,
+        lignes: lignes.map((l) => ({
+          articleId: l.articleId,
+          quantite: l.quantite,
+          prixAchat: l.prixAchat,
+        })),
+      });
+      setSucces('Réception enregistrée avec succès — le stock a été mis à jour.');
+      setLignes([]);
+      setFournisseur('');
+      setReference('');
+      setNotes('');
+      chargerReceptions();
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setEnvoiEnCours(false);
+    }
+  }
+
+  return (
+    <div style={styles.grilleDeux}>
+      <div style={styles.carte}>
+        <h3 style={styles.titreCarte}>Nouvelle réception</h3>
+
+        {erreur && <div style={styles.bandeauErreur}>{erreur}</div>}
+        {succes && <div style={styles.bandeauConfirmation}>{succes}</div>}
+
+        <div style={styles.ligneChamps}>
+          <label style={styles.champLabel}>
+            Lieu de réception
+            <select style={styles.champInput} value={lieuId} onChange={(e) => setLieuId(e.target.value)}>
+              <option value="">—</option>
+              {lieux.map((l) => (
+                <option key={l.id} value={l.id}>{l.nom}</option>
+              ))}
+            </select>
+          </label>
+          <label style={styles.champLabel}>
+            Fournisseur
+            <input
+              style={styles.champInput}
+              value={fournisseur}
+              onChange={(e) => setFournisseur(e.target.value)}
+              placeholder="Optionnel…"
+            />
+          </label>
+        </div>
+
+        <label style={styles.champLabel}>
+          Référence (bon de livraison…)
+          <input
+            style={styles.champInput}
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            placeholder="Optionnel…"
+          />
+        </label>
+
+        <div style={styles.ligneChamps}>
+          <label style={{ ...styles.champLabel, flex: 1 }}>
+            Article
+            <select style={styles.champInput} value={articleAAjouter} onChange={(e) => gererChoixArticle(e.target.value)}>
+              <option value="">—</option>
+              {articles.map((a) => (
+                <option key={a.id} value={a.id}>{a.designation} ({a.reference})</option>
+              ))}
+            </select>
+          </label>
+          <label style={styles.champLabel}>
+            Qté
+            <input
+              type="number"
+              min="1"
+              style={{ ...styles.champInput, width: 80 }}
+              value={quantiteAAjouter}
+              onChange={(e) => setQuantiteAAjouter(e.target.value)}
+            />
+          </label>
+          <label style={styles.champLabel}>
+            Prix d'achat
+            <input
+              type="number"
+              min="0"
+              style={{ ...styles.champInput, width: 110 }}
+              value={prixAchatAAjouter}
+              onChange={(e) => setPrixAchatAAjouter(e.target.value)}
+            />
+          </label>
+          <button onClick={ajouterLigne} style={styles.boutonAjouter}>Ajouter</button>
+        </div>
+
+        {lignes.length > 0 && (
+          <div style={styles.listeLignes}>
+            {lignes.map((l) => (
+              <div key={l.articleId} style={styles.ligneItem}>
+                <span>{l.designation}</span>
+                <span style={{ fontWeight: 600 }}>× {l.quantite} — {l.prixAchat.toLocaleString('fr-FR')} F/u</span>
+                <button onClick={() => retirerLigne(l.articleId)} style={styles.boutonRetirer}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <label style={styles.champLabel}>
+          Notes
+          <input style={styles.champInput} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optionnel…" />
+        </label>
+
+        <button onClick={validerReception} disabled={envoiEnCours} style={styles.boutonValider}>
+          {envoiEnCours ? 'Enregistrement…' : 'Valider la réception'}
+        </button>
+      </div>
+
+      <div style={styles.carte}>
+        <h3 style={styles.titreCarte}>Réceptions récentes</h3>
+        {chargementListe && <p style={styles.texteMuet}>Chargement…</p>}
+        {!chargementListe && receptions.length === 0 && (
+          <p style={styles.texteMuet}>Aucune réception pour l'instant.</p>
+        )}
+        <div style={styles.listeTransferts}>
+          {receptions.map((r) => (
+            <div key={r.id} style={styles.carteTransfert}>
+              <div style={styles.enTeteCarteTransfert}>
+                <span style={{ fontWeight: 700 }}>{r.fournisseur || 'Fournisseur non renseigné'}</span>
+                <span style={styles.texteMuet}>
+                  {new Date(r.dateReception).toLocaleDateString('fr-FR')}
+                </span>
+              </div>
+              <div style={styles.texteMuet}>{r.lieu?.nom}</div>
+              <div style={styles.texteMuet}>
+                {r.lignes.map((l) => `${l.article.designation} ×${l.quantite}`).join(', ')}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
