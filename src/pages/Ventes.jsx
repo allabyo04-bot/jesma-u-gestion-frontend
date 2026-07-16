@@ -30,6 +30,81 @@ function chargerVentesEnAttente() {
   }
 }
 
+// ------------------------------------------------------------
+// TICKET DE CAISSE
+// ------------------------------------------------------------
+function construireTicketHtml({ vente, panier, remise, totalNet, paiements, contributionAvoir, avoirReference, lieuNom, vendeurNom, estCredit, montantRestant }) {
+  const date = new Date(vente.createdAt || Date.now());
+  const dateTexte = date.toLocaleDateString('fr-FR');
+  const heureTexte = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+  const lignesHtml = panier.map((l) => `
+    <tr>
+      <td colspan="3" class="designation">${l.designation}</td>
+    </tr>
+    <tr>
+      <td>${l.quantite} × ${l.prixUnitaire.toLocaleString('fr-FR')}</td>
+      <td></td>
+      <td class="montant">${(l.quantite * l.prixUnitaire).toLocaleString('fr-FR')} F</td>
+    </tr>
+  `).join('');
+
+  const paiementsHtml = paiements.map((p) => `
+    <div class="ligne-total"><span>${p.mode}</span><span>${p.montant.toLocaleString('fr-FR')} F</span></div>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ticket ${vente.numero}</title>
+<style>
+  @page { size: 80mm auto; margin: 0; }
+  body { font-family: 'Courier New', monospace; width: 76mm; margin: 4mm auto; font-size: 12px; color: #000; }
+  .centre { text-align: center; }
+  h1 { font-size: 16px; margin: 0 0 2px 0; }
+  .sous-titre { font-size: 11px; margin-bottom: 8px; }
+  hr { border: none; border-top: 1px dashed #000; margin: 8px 0; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 1px 0; vertical-align: top; }
+  .designation { font-weight: bold; padding-top: 4px; }
+  .montant { text-align: right; }
+  .ligne-total { display: flex; justify-content: space-between; margin: 2px 0; }
+  .total-final { font-weight: bold; font-size: 14px; margin-top: 6px; }
+  .pied { text-align: center; margin-top: 12px; font-size: 11px; }
+</style>
+</head>
+<body>
+  <div class="centre">
+    <h1>JESMA U</h1>
+    <div class="sous-titre">${lieuNom || ''}</div>
+    <div>${dateTexte} — ${heureTexte}</div>
+    <div>Ticket ${vente.numero}</div>
+    ${vendeurNom ? `<div>Vendeur : ${vendeurNom}</div>` : ''}
+  </div>
+  <hr>
+  <table>${lignesHtml}</table>
+  <hr>
+  <div class="ligne-total"><span>Sous-total</span><span>${(totalNet + remise).toLocaleString('fr-FR')} F</span></div>
+  ${remise > 0 ? `<div class="ligne-total"><span>Remise</span><span>−${remise.toLocaleString('fr-FR')} F</span></div>` : ''}
+  <div class="ligne-total total-final"><span>TOTAL</span><span>${totalNet.toLocaleString('fr-FR')} F</span></div>
+  <hr>
+  ${paiementsHtml}
+  ${contributionAvoir > 0 ? `<div class="ligne-total"><span>Avoir ${avoirReference || ''}</span><span>−${contributionAvoir.toLocaleString('fr-FR')} F</span></div>` : ''}
+  ${estCredit && montantRestant > 1 ? `<div class="ligne-total"><span>Reste dû (crédit)</span><span>${montantRestant.toLocaleString('fr-FR')} F</span></div>` : ''}
+  <div class="pied">Merci de votre visite !</div>
+  <script>window.onload = () => window.print();</script>
+</body>
+</html>`;
+}
+
+function imprimerTicketDepuisHtml(html) {
+  const fenetre = window.open('', '_blank', 'width=380,height=600');
+  if (!fenetre) return;
+  fenetre.document.write(html);
+  fenetre.document.close();
+}
+
 export default function Ventes() {
   const navigate = useNavigate();
   const utilisateur = getUtilisateur();
@@ -63,6 +138,7 @@ export default function Ventes() {
   const [venteEnCours, setVenteEnCours] = useState(false);
   const [erreurVente, setErreurVente] = useState('');
   const [confirmation, setConfirmation] = useState(null);
+  const [dernierTicketHtml, setDernierTicketHtml] = useState(null);
 
   const [ventesEnAttente, setVentesEnAttente] = useState([]);
 
@@ -480,6 +556,27 @@ export default function Ventes() {
         })),
         paiements: paiements.map((p) => ({ mode: p.mode, montant: p.montant })),
       });
+
+      // Le ticket est construit ici, avant réinitialisation du panier, pendant qu'on a
+      // encore toutes les infos (désignations, boutique, vendeur) sous la main.
+      const lieuNom = lieux.find((l) => String(l.id) === String(lieuId))?.nom;
+      const vendeurNom = vendeurs.find((v) => String(v.id) === String(vendeurId))?.nomComplet;
+      const ticketHtml = construireTicketHtml({
+        vente,
+        panier,
+        remise,
+        totalNet,
+        paiements,
+        contributionAvoir,
+        avoirReference: avoirVerifie?.reference,
+        lieuNom,
+        vendeurNom,
+        estCredit,
+        montantRestant: resteAPayer,
+      });
+      setDernierTicketHtml(ticketHtml);
+      imprimerTicketDepuisHtml(ticketHtml);
+
       setConfirmation({ ...vente, montantRestantAffiche: estCredit ? resteAPayer : 0 });
       diffuserVenteValidee(vente);
       reinitialiserVente();
@@ -861,6 +958,14 @@ export default function Ventes() {
                 {confirmation.montantRestantAffiche > 1 && (
                   <> — reste dû (crédit) : {confirmation.montantRestantAffiche.toLocaleString('fr-FR')} F</>
                 )}
+                {dernierTicketHtml && (
+                  <button
+                    onClick={() => imprimerTicketDepuisHtml(dernierTicketHtml)}
+                    style={{ ...styles.boutonAjouterPaiement, marginLeft: 12 }}
+                  >
+                    🖨️ Réimprimer le ticket
+                  </button>
+                )}
               </div>
             )}
             {erreurVente && <div style={styles.bandeauErreur}>{erreurVente}</div>}
@@ -1099,7 +1204,7 @@ const styles = {
   champLabel: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600 },
   texteVerrouille: { fontWeight: 400, fontSize: 11, color: 'var(--brown-soft)' },
   champInput: { padding: '8px 10px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14, minWidth: 160 },
-  bandeauConfirmation: { padding: '10px 14px', borderRadius: 8, background: '#DFF3E3', color: '#1E6B36', fontSize: 14, fontWeight: 600 },
+  bandeauConfirmation: { padding: '10px 14px', borderRadius: 8, background: '#DFF3E3', color: '#1E6B36', fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', flexWrap: 'wrap' },
   bandeauErreur: { padding: '10px 14px', borderRadius: 8, background: '#FBE4E1', color: 'var(--error)', fontSize: 14, fontWeight: 600 },
   zonePrincipale: { display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 16, flex: 1 },
   blocAjoutArticle: { background: 'var(--white)', borderRadius: 12, padding: 16 },
