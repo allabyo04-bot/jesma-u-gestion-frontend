@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { appelApi, uploaderPhotoArticle } from '../lib/api';
+import { appelApi, uploaderPhotoArticle, recupererHtmlAvecAuth } from '../lib/api';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'https://jesma-u-gestion-backend-production.up.railway.app/api';
 
@@ -11,6 +11,7 @@ export default function Articles() {
   const [erreur, setErreur] = useState('');
   const [chargement, setChargement] = useState(true);
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
+  const [articleEnEdition, setArticleEnEdition] = useState(null);
   const [nombreAImprimer, setNombreAImprimer] = useState(0);
 
   useEffect(() => {
@@ -39,13 +40,25 @@ export default function Articles() {
     rafraichirCompteurImpression();
   }
 
-  function ouvrirImpressionEtiquettes() {
-    // Le token doit être transmis car cette route est protégée ; on ne peut pas juste
-    // ouvrir l'URL directement dans un nouvel onglet (pas d'en-tête Authorization possible
-    // sur une simple navigation), donc on récupère le HTML nous-mêmes et on l'affiche.
-    appelApi('GET', '/articles/a-imprimer/etiquettes-html')
-      .catch(() => null); // ignorée : voir bouton ci-dessous, approche directe par fenêtre
-    window.open(`${BASE_URL}/articles/a-imprimer/etiquettes`, '_blank');
+  async function ouvrirImpressionEtiquettes() {
+    try {
+      const html = await recupererHtmlAvecAuth('/articles/a-imprimer/etiquettes');
+      const fenetre = window.open('', '_blank');
+      fenetre.document.write(html);
+      fenetre.document.close();
+    } catch (err) {
+      alert("Impossible d'ouvrir les étiquettes : " + err.message);
+    }
+  }
+
+  function ouvrirCreation() {
+    setArticleEnEdition(null);
+    setFormulaireOuvert(true);
+  }
+
+  function ouvrirEdition(article) {
+    setArticleEnEdition(article);
+    setFormulaireOuvert(true);
   }
 
   return (
@@ -61,7 +74,7 @@ export default function Articles() {
               🖨️ Étiquettes à imprimer ({nombreAImprimer})
             </button>
           )}
-          <button onClick={() => setFormulaireOuvert(true)} style={styles.boutonAjouter}>
+          <button onClick={ouvrirCreation} style={styles.boutonAjouter}>
             + Nouvel article
           </button>
         </div>
@@ -78,6 +91,7 @@ export default function Articles() {
               article={article}
               onPhotoMiseAJour={mettreAJourArticle}
               onCodeBarreGenere={mettreAJourArticle}
+              onModifier={ouvrirEdition}
             />
           ))}
           {articles.length === 0 && <p>Aucun article pour l'instant.</p>}
@@ -87,9 +101,14 @@ export default function Articles() {
       {formulaireOuvert && (
         <FormulaireArticle
           familles={familles}
+          articleEnEdition={articleEnEdition}
           onFermer={() => setFormulaireOuvert(false)}
           onCree={(article) => {
             ajouterArticleALaListe(article);
+            setFormulaireOuvert(false);
+          }}
+          onModifie={(article) => {
+            mettreAJourArticle(article);
             setFormulaireOuvert(false);
           }}
         />
@@ -98,7 +117,7 @@ export default function Articles() {
   );
 }
 
-function CarteArticle({ article, onPhotoMiseAJour, onCodeBarreGenere }) {
+function CarteArticle({ article, onPhotoMiseAJour, onCodeBarreGenere, onModifier }) {
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [erreurPhoto, setErreurPhoto] = useState('');
   const [generationEnCours, setGenerationEnCours] = useState(false);
@@ -151,7 +170,12 @@ function CarteArticle({ article, onPhotoMiseAJour, onCodeBarreGenere }) {
         />
       </label>
       <div style={styles.corpsCarte}>
-        <div style={styles.designation}>{article.designation}</div>
+        <div style={styles.enTeteCorpsCarte}>
+          <div style={styles.designation}>{article.designation}</div>
+          <button onClick={() => onModifier(article)} style={styles.boutonModifier} title="Modifier">
+            ✏️
+          </button>
+        </div>
         <div style={styles.reference}>{article.reference}</div>
         <div style={styles.prix}>{Number(article.prixVente).toLocaleString('fr-FR')} F</div>
         <div style={styles.stock}>
@@ -176,16 +200,18 @@ function CarteArticle({ article, onPhotoMiseAJour, onCodeBarreGenere }) {
   );
 }
 
-function FormulaireArticle({ familles, onFermer, onCree }) {
-  const [designation, setDesignation] = useState('');
-  const [reference, setReference] = useState('');
-  const [codeBarre, setCodeBarre] = useState('');
-  const [codeInterne, setCodeInterne] = useState('');
-  const [familleId, setFamilleId] = useState('');
-  const [sousFamilleId, setSousFamilleId] = useState('');
-  const [prixAchat, setPrixAchat] = useState('');
-  const [prixVente, setPrixVente] = useState('');
-  const [seuilAlerte, setSeuilAlerte] = useState('5');
+function FormulaireArticle({ familles, articleEnEdition, onFermer, onCree, onModifie }) {
+  const estEdition = !!articleEnEdition;
+
+  const [designation, setDesignation] = useState(articleEnEdition?.designation || '');
+  const [reference, setReference] = useState(articleEnEdition?.reference || '');
+  const [codeBarre, setCodeBarre] = useState(articleEnEdition?.codeBarre || '');
+  const [codeInterne, setCodeInterne] = useState(articleEnEdition?.codeInterne || '');
+  const [familleId, setFamilleId] = useState(articleEnEdition?.familleId ? String(articleEnEdition.familleId) : '');
+  const [sousFamilleId, setSousFamilleId] = useState(articleEnEdition?.sousFamilleId ? String(articleEnEdition.sousFamilleId) : '');
+  const [prixAchat, setPrixAchat] = useState(articleEnEdition?.prixAchat ?? '');
+  const [prixVente, setPrixVente] = useState(articleEnEdition?.prixVente ?? '');
+  const [seuilAlerte, setSeuilAlerte] = useState(articleEnEdition ? String(articleEnEdition.seuilAlerte) : '5');
   const [erreur, setErreur] = useState('');
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
 
@@ -203,18 +229,31 @@ function FormulaireArticle({ familles, onFermer, onCree }) {
 
     setEnvoiEnCours(true);
     try {
-      const article = await appelApi('POST', '/articles', {
-        reference,
-        codeBarre: codeBarre.trim() || undefined,
-        codeInterne: codeInterne.trim() || undefined,
-        designation,
-        familleId: familleId || null,
-        sousFamilleId: sousFamilleId || null,
-        prixAchat: prixAchat ? Number(prixAchat) : 0,
-        prixVente: Number(prixVente),
-        seuilAlerte: Number(seuilAlerte),
-      });
-      onCree(article);
+      if (estEdition) {
+        const article = await appelApi('PUT', `/articles/${articleEnEdition.id}`, {
+          reference,
+          designation,
+          familleId: familleId || null,
+          sousFamilleId: sousFamilleId || null,
+          prixAchat: prixAchat !== '' ? Number(prixAchat) : 0,
+          prixVente: Number(prixVente),
+          seuilAlerte: Number(seuilAlerte),
+        });
+        onModifie(article);
+      } else {
+        const article = await appelApi('POST', '/articles', {
+          reference,
+          codeBarre: codeBarre.trim() || undefined,
+          codeInterne: codeInterne.trim() || undefined,
+          designation,
+          familleId: familleId || null,
+          sousFamilleId: sousFamilleId || null,
+          prixAchat: prixAchat ? Number(prixAchat) : 0,
+          prixVente: Number(prixVente),
+          seuilAlerte: Number(seuilAlerte),
+        });
+        onCree(article);
+      }
     } catch (err) {
       setErreur(err.message);
     } finally {
@@ -225,7 +264,7 @@ function FormulaireArticle({ familles, onFermer, onCree }) {
   return (
     <div style={styles.overlay} onClick={onFermer}>
       <form style={styles.formulaire} onClick={(e) => e.stopPropagation()} onSubmit={gererSoumission}>
-        <h2 style={styles.titreFormulaire}>Nouvel article</h2>
+        <h2 style={styles.titreFormulaire}>{estEdition ? 'Modifier l\'article' : 'Nouvel article'}</h2>
 
         {erreur && <p style={{ color: 'var(--error)' }}>{erreur}</p>}
 
@@ -239,26 +278,35 @@ function FormulaireArticle({ familles, onFermer, onCree }) {
           <input style={styles.champInput} value={reference} onChange={(e) => setReference(e.target.value)} />
         </label>
 
-        <label style={styles.champLabel}>
-          Code-barre
-          <input
-            autoFocus={false}
-            style={styles.champInput}
-            placeholder="Scanner ou laisser vide (généré plus tard)"
-            value={codeBarre}
-            onChange={(e) => setCodeBarre(e.target.value)}
-          />
-        </label>
+        {!estEdition && (
+          <>
+            <label style={styles.champLabel}>
+              Code-barre
+              <input
+                style={styles.champInput}
+                placeholder="Scanner ou laisser vide (généré plus tard)"
+                value={codeBarre}
+                onChange={(e) => setCodeBarre(e.target.value)}
+              />
+            </label>
 
-        <label style={styles.champLabel}>
-          Code article (interne)
-          <input
-            style={styles.champInput}
-            placeholder="Optionnel"
-            value={codeInterne}
-            onChange={(e) => setCodeInterne(e.target.value)}
-          />
-        </label>
+            <label style={styles.champLabel}>
+              Code article (interne)
+              <input
+                style={styles.champInput}
+                placeholder="Optionnel"
+                value={codeInterne}
+                onChange={(e) => setCodeInterne(e.target.value)}
+              />
+            </label>
+          </>
+        )}
+
+        {estEdition && articleEnEdition.codeBarre && (
+          <p style={{ fontSize: 12, color: 'var(--brown-soft)' }}>
+            Code-barre : {articleEnEdition.codeBarre} (non modifiable ici)
+          </p>
+        )}
 
         <label style={styles.champLabel}>
           Famille
@@ -307,7 +355,7 @@ function FormulaireArticle({ familles, onFermer, onCree }) {
         <div style={styles.boutonsFormulaire}>
           <button type="button" onClick={onFermer} style={styles.boutonAnnuler}>Annuler</button>
           <button type="submit" disabled={envoiEnCours} style={styles.boutonValider}>
-            {envoiEnCours ? 'Création…' : 'Créer'}
+            {envoiEnCours ? 'Enregistrement…' : (estEdition ? 'Enregistrer' : 'Créer')}
           </button>
         </div>
       </form>
@@ -328,6 +376,8 @@ const styles = {
   image: { width: '100%', height: '100%', objectFit: 'cover' },
   placeholderPhoto: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brown-soft)', fontSize: 13, textAlign: 'center', padding: 12 },
   corpsCarte: { padding: 12 },
+  enTeteCorpsCarte: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 },
+  boutonModifier: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 },
   designation: { fontWeight: 600, fontSize: 14, marginBottom: 4 },
   reference: { fontSize: 12, color: 'var(--brown-soft)', marginBottom: 6 },
   prix: { fontSize: 16, fontWeight: 700, color: 'var(--gold-deep)', marginBottom: 4 },
