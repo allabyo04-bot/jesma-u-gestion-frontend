@@ -57,6 +57,21 @@ export async function appelApiPublic(methode, chemin, corps) {
   return data;
 }
 
+// Récupère une page HTML protégée par connexion (ex: étiquettes à imprimer) — impossible
+// via une simple ouverture de lien classique car le token ne serait pas transmis.
+export async function recupererHtmlAvecAuth(chemin) {
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const reponse = await fetch(`${BASE_URL}${chemin}`, { headers });
+  const texte = await reponse.text();
+  if (!reponse.ok) {
+    throw new Error('Impossible de récupérer les étiquettes.');
+  }
+  return texte;
+}
+
 // Upload multipart (photo article) : pas de Content-Type JSON, FormData gère l'en-tête lui-même
 export async function uploaderPhotoArticle(articleId, fichier) {
   const headers = {};
