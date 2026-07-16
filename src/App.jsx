@@ -9,6 +9,7 @@ import CartesCadeaux from './pages/CartesCadeaux.jsx';
 import ListesCadeaux from './pages/ListesCadeaux.jsx';
 import ListeCadeauPublique from './pages/ListeCadeauPublique.jsx';
 import Etats from './pages/Etats.jsx';
+import Utilisateurs from './pages/Utilisateurs.jsx';
 
 function estConnecte() {
   return !!localStorage.getItem('jesma_token');
@@ -59,6 +60,14 @@ export default function App() {
         element={
           <RouteProtegee>
             <Etats />
+          </RouteProtegee>
+        }
+      />
+      <Route
+        path="/utilisateurs"
+        element={
+          <RouteProtegee>
+            <Utilisateurs />
           </RouteProtegee>
         }
       />
