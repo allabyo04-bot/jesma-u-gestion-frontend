@@ -37,6 +37,7 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   const date = new Date(vente.createdAt || Date.now());
   const dateTexte = date.toLocaleDateString('fr-FR');
   const heureTexte = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const logoUrl = `${window.location.origin}/logo-jesma-u.png`;
 
   const lignesHtml = panier.map((l) => `
     <tr>
@@ -62,6 +63,7 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   @page { size: 80mm auto; margin: 0; }
   body { font-family: 'Courier New', monospace; width: 76mm; margin: 4mm auto; font-size: 12px; color: #000; }
   .centre { text-align: center; }
+  .logo { max-width: 55mm; max-height: 25mm; margin-bottom: 4px; }
   h1 { font-size: 16px; margin: 0 0 2px 0; }
   .sous-titre { font-size: 11px; margin-bottom: 8px; }
   hr { border: none; border-top: 1px dashed #000; margin: 8px 0; }
@@ -72,10 +74,12 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   .ligne-total { display: flex; justify-content: space-between; margin: 2px 0; }
   .total-final { font-weight: bold; font-size: 14px; margin-top: 6px; }
   .pied { text-align: center; margin-top: 12px; font-size: 11px; }
+  .coordonnees { text-align: center; margin-top: 4px; font-size: 10px; line-height: 1.5; }
 </style>
 </head>
 <body>
   <div class="centre">
+    <img src="${logoUrl}" class="logo" alt="Jesma U" onerror="this.style.display='none'">
     <h1>JESMA U</h1>
     <div class="sous-titre">${lieuNom || ''}</div>
     <div>${dateTexte} — ${heureTexte}</div>
@@ -92,12 +96,16 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   ${paiementsHtml}
   ${contributionAvoir > 0 ? `<div class="ligne-total"><span>Avoir ${avoirReference || ''}</span><span>−${contributionAvoir.toLocaleString('fr-FR')} F</span></div>` : ''}
   ${estCredit && montantRestant > 1 ? `<div class="ligne-total"><span>Reste dû (crédit)</span><span>${montantRestant.toLocaleString('fr-FR')} F</span></div>` : ''}
+  <hr>
   <div class="pied">Merci de votre visite !</div>
+  <div class="coordonnees">
+    Grand-Bassam, carrefour rosier 5<br>
+    WhatsApp +225 07 69 535 786
+  </div>
   <script>window.onload = () => window.print();</script>
 </body>
 </html>`;
 }
-
 function imprimerTicketDepuisHtml(html) {
   const fenetre = window.open('', '_blank', 'width=380,height=600');
   if (!fenetre) return;
