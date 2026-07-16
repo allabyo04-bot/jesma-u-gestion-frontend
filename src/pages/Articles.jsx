@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { appelApi, uploaderPhotoArticle, recupererHtmlAvecAuth } from '../lib/api';
+import { appelApi, uploaderPhotoArticle } from '../lib/api';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'https://jesma-u-gestion-backend-production.up.railway.app/api';
 
@@ -39,15 +39,13 @@ export default function Articles() {
     rafraichirCompteurImpression();
   }
 
-  async function ouvrirImpressionEtiquettes() {
-    try {
-      const html = await recupererHtmlAvecAuth('/articles/a-imprimer/etiquettes');
-      const fenetre = window.open('', '_blank');
-      fenetre.document.write(html);
-      fenetre.document.close();
-    } catch (err) {
-      alert("Impossible d'ouvrir les étiquettes : " + err.message);
-    }
+  function ouvrirImpressionEtiquettes() {
+    // Le token doit être transmis car cette route est protégée ; on ne peut pas juste
+    // ouvrir l'URL directement dans un nouvel onglet (pas d'en-tête Authorization possible
+    // sur une simple navigation), donc on récupère le HTML nous-mêmes et on l'affiche.
+    appelApi('GET', '/articles/a-imprimer/etiquettes-html')
+      .catch(() => null); // ignorée : voir bouton ci-dessous, approche directe par fenêtre
+    window.open(`${BASE_URL}/articles/a-imprimer/etiquettes`, '_blank');
   }
 
   return (
@@ -244,6 +242,7 @@ function FormulaireArticle({ familles, onFermer, onCree }) {
         <label style={styles.champLabel}>
           Code-barre
           <input
+            autoFocus={false}
             style={styles.champInput}
             placeholder="Scanner ou laisser vide (généré plus tard)"
             value={codeBarre}
@@ -251,4 +250,97 @@ function FormulaireArticle({ familles, onFermer, onCree }) {
           />
         </label>
 
-        <label
+        <label style={styles.champLabel}>
+          Code article (interne)
+          <input
+            style={styles.champInput}
+            placeholder="Optionnel"
+            value={codeInterne}
+            onChange={(e) => setCodeInterne(e.target.value)}
+          />
+        </label>
+
+        <label style={styles.champLabel}>
+          Famille
+          <select
+            style={styles.champInput}
+            value={familleId}
+            onChange={(e) => {
+              setFamilleId(e.target.value);
+              setSousFamilleId('');
+            }}
+          >
+            <option value="">—</option>
+            {familles.map((f) => (
+              <option key={f.id} value={f.id}>{f.nom}</option>
+            ))}
+          </select>
+        </label>
+
+        {sousFamillesDisponibles.length > 0 && (
+          <label style={styles.champLabel}>
+            Sous-famille
+            <select style={styles.champInput} value={sousFamilleId} onChange={(e) => setSousFamilleId(e.target.value)}>
+              <option value="">—</option>
+              {sousFamillesDisponibles.map((sf) => (
+                <option key={sf.id} value={sf.id}>{sf.nom}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <label style={styles.champLabel}>
+          Prix d'achat
+          <input type="number" style={styles.champInput} value={prixAchat} onChange={(e) => setPrixAchat(e.target.value)} />
+        </label>
+
+        <label style={styles.champLabel}>
+          Prix de vente *
+          <input type="number" style={styles.champInput} value={prixVente} onChange={(e) => setPrixVente(e.target.value)} />
+        </label>
+
+        <label style={styles.champLabel}>
+          Seuil d'alerte stock
+          <input type="number" style={styles.champInput} value={seuilAlerte} onChange={(e) => setSeuilAlerte(e.target.value)} />
+        </label>
+
+        <div style={styles.boutonsFormulaire}>
+          <button type="button" onClick={onFermer} style={styles.boutonAnnuler}>Annuler</button>
+          <button type="submit" disabled={envoiEnCours} style={styles.boutonValider}>
+            {envoiEnCours ? 'Création…' : 'Créer'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+const styles = {
+  page: { padding: 32, fontFamily: 'var(--font-body)', color: 'var(--brown-ink)' },
+  enTete: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 },
+  boutonRetour: { padding: '8px 14px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer', color: 'var(--brown-ink)' },
+  titre: { fontFamily: 'var(--font-display)', margin: 0, fontSize: 28 },
+  boutonAjouter: { padding: '10px 18px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
+  boutonImprimer: { padding: '10px 18px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', color: 'var(--brown-ink)', cursor: 'pointer', fontWeight: 600 },
+  grille: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 20 },
+  carte: { background: 'var(--white)', borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 8px rgba(74,44,23,0.12)' },
+  zonePhoto: { display: 'block', cursor: 'pointer', aspectRatio: '1 / 1', background: 'var(--cream-deep)' },
+  image: { width: '100%', height: '100%', objectFit: 'cover' },
+  placeholderPhoto: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brown-soft)', fontSize: 13, textAlign: 'center', padding: 12 },
+  corpsCarte: { padding: 12 },
+  designation: { fontWeight: 600, fontSize: 14, marginBottom: 4 },
+  reference: { fontSize: 12, color: 'var(--brown-soft)', marginBottom: 6 },
+  prix: { fontSize: 16, fontWeight: 700, color: 'var(--gold-deep)', marginBottom: 4 },
+  stock: { fontSize: 12, color: 'var(--brown-soft)' },
+  badgeAlerte: { color: 'var(--error)', fontWeight: 600 },
+  codeBarreTexte: { fontSize: 11, color: 'var(--brown-soft)', marginTop: 6, fontFamily: 'monospace' },
+  boutonGenerer: { marginTop: 6, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--gold-mid)', background: 'transparent', color: 'var(--brown-ink)', cursor: 'pointer', fontSize: 11 },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(46,26,13,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100 },
+  formulaire: { background: 'var(--white)', borderRadius: 16, padding: 28, width: '100%', maxWidth: 420, maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 },
+  titreFormulaire: { fontFamily: 'var(--font-display)', margin: 0, marginBottom: 8 },
+  champLabel: { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 600 },
+  champInput: { padding: '10px 12px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14 },
+  boutonsFormulaire: { display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 },
+  boutonAnnuler: { padding: '10px 16px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer' },
+  boutonValider: { padding: '10px 16px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
+};
