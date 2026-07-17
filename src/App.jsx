@@ -10,6 +10,7 @@ import ListesCadeaux from './pages/ListesCadeaux.jsx';
 import ListeCadeauPublique from './pages/ListeCadeauPublique.jsx';
 import Etats from './pages/Etats.jsx';
 import Utilisateurs from './pages/Utilisateurs.jsx';
+import Roles from './pages/Roles.jsx';
 import Depenses from './pages/Depenses.jsx';
 
 function estConnecte() {
@@ -37,6 +38,14 @@ export default function App() {
         element={
           <RouteProtegee>
             <Articles />
+          </RouteProtegee>
+        }
+      />
+     <Route
+        path="/roles"
+        element={
+          <RouteProtegee>
+            <Roles />
           </RouteProtegee>
         }
       />

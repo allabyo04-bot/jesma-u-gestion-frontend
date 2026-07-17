@@ -23,41 +23,47 @@ export default function Dashboard() {
     <div style={{ padding: 32, fontFamily: 'sans-serif', color: '#4A2C17' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h1>Bonjour, {utilisateur?.nomComplet || 'Victoria'} 👋</h1>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-  <button onClick={() => navigate('/ventes')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
-    Ventes
-  </button>
-  {utilisateur?.role === 'ADMIN' && (
-    <button onClick={() => navigate('/articles')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
-      Articles
-    </button>
-  )}
-  {utilisateur?.role === 'ADMIN' && (
-    <button onClick={() => navigate('/stock')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
-      Stock
-    </button>
-  )}
-  <button onClick={() => navigate('/etats')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
-    États
-  </button>
-  <button onClick={() => navigate('/cartes-cadeaux')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
-    Cartes cadeaux
-  </button>
-<button onClick={() => navigate('/depenses')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
-    Dépenses
-  </button>
-  <button onClick={() => navigate('/listes-cadeaux')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
-    Listes cadeaux
-  </button>
-  {utilisateur?.role === 'ADMIN' && (
-    <button onClick={() => navigate('/utilisateurs')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
-      Utilisateurs
-    </button>
-  )}
-  <button onClick={deconnexion} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: 'transparent', cursor: 'pointer' }}>
-    Déconnexion
-  </button>
-</div>      </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={() => navigate('/ventes')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+            Ventes
+          </button>
+          {utilisateur?.role === 'ADMIN' && (
+            <button onClick={() => navigate('/articles')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+              Articles
+            </button>
+          )}
+          {utilisateur?.role === 'ADMIN' && (
+            <button onClick={() => navigate('/stock')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+              Stock
+            </button>
+          )}
+          <button onClick={() => navigate('/etats')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+            États
+          </button>
+          <button onClick={() => navigate('/cartes-cadeaux')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+            Cartes cadeaux
+          </button>
+          <button onClick={() => navigate('/depenses')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+            Dépenses
+          </button>
+          <button onClick={() => navigate('/listes-cadeaux')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+            Listes cadeaux
+          </button>
+          {utilisateur?.role === 'ADMIN' && (
+            <button onClick={() => navigate('/utilisateurs')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+              Utilisateurs
+            </button>
+          )}
+          {utilisateur?.role === 'ADMIN' && (
+            <button onClick={() => navigate('/roles')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+              Rôles
+            </button>
+          )}
+          <button onClick={deconnexion} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: 'transparent', cursor: 'pointer' }}>
+            Déconnexion
+          </button>
+        </div>
+      </div>
 
       {erreur && <p style={{ color: '#B23A2E' }}>{erreur}</p>}
 
