@@ -71,6 +71,29 @@ export async function recupererHtmlAvecAuth(chemin) {
   }
   return texte;
 }
+// Upload multipart générique (fichier Excel d'import stock)
+export async function uploaderFichierImport(fichier) {
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const formData = new FormData();
+  formData.append('fichier', fichier);
+
+  const reponse = await fetch(`${BASE_URL}/stock/import/previsualiser`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  const texte = await reponse.text();
+  let data;
+  try { data = texte ? JSON.parse(texte) : null; } catch { data = texte; }
+  if (!reponse.ok) {
+    const message = (data && data.error) || "Échec de la lecture du fichier.";
+    throw new Error(message);
+  }
+  return data;
+}
 
 // Upload multipart (photo article) : pas de Content-Type JSON, FormData gère l'en-tête lui-même
 export async function uploaderPhotoArticle(articleId, fichier) {

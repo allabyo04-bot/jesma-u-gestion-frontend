@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { appelApi } from '../lib/api';
+import { appelApi, uploaderFichierImport } from '../lib/api';
 
 const SOUS_ONGLETS = [
   { id: 'reception', label: 'Réception' },
+  { id: 'import', label: 'Import Excel' },
   { id: 'transferts', label: 'Transferts' },
   { id: 'historique', label: 'Historique des mouvements' },
   { id: 'etat', label: 'État du stock' },
@@ -57,6 +58,7 @@ export default function Stock() {
       </div>
 
       {ongletActif === 'reception' && <OngletReception lieux={lieux} articles={articles} />}
+      {ongletActif === 'import' && <OngletImportExcel lieux={lieux} />}
       {ongletActif === 'transferts' && <OngletTransferts lieux={lieux} articles={articles} />}
       {ongletActif === 'historique' && <OngletHistorique articles={articles} lieux={lieux} />}
       {ongletActif === 'etat' && <OngletEtatStock lieux={lieux} />}
@@ -720,6 +722,171 @@ function OngletEtatGlobal({ lieux, articles }) {
   );
 }
 
+// ------------------------------------------------------------
+// ONGLET IMPORT EXCEL
+// Colonnes attendues : Référence | CodeBarre (optionnel) | Désignation |
+// Quantité | PrixAchat | PrixVente (optionnel si article existant)
+// ------------------------------------------------------------
+function OngletImportExcel({ lieux }) {
+  const [lieuId, setLieuId] = useState('');
+  const [fournisseur, setFournisseur] = useState('');
+  const [fichier, setFichier] = useState(null);
+  const [apercu, setApercu] = useState(null);
+  const [lectureEnCours, setLectureEnCours] = useState(false);
+  const [confirmationEnCours, setConfirmationEnCours] = useState(false);
+  const [erreur, setErreur] = useState('');
+  const [succes, setSucces] = useState('');
+
+  function gererChoixFichier(e) {
+    setFichier(e.target.files[0] || null);
+    setApercu(null);
+    setErreur('');
+    setSucces('');
+  }
+
+  async function analyserFichier() {
+    if (!fichier) {
+      setErreur('Choisissez un fichier Excel (.xlsx) à analyser.');
+      return;
+    }
+    setErreur('');
+    setSucces('');
+    setLectureEnCours(true);
+    try {
+      const resultat = await uploaderFichierImport(fichier);
+      setApercu(resultat);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setLectureEnCours(false);
+    }
+  }
+
+  const lignesValides = apercu ? apercu.lignes.filter((l) => l.statut !== 'ERREUR') : [];
+  const lignesEnErreur = apercu ? apercu.lignes.filter((l) => l.statut === 'ERREUR') : [];
+
+  async function confirmerImport() {
+    setErreur('');
+    setSucces('');
+    if (!lieuId) {
+      setErreur('Sélectionnez le lieu qui reçoit la marchandise.');
+      return;
+    }
+    if (lignesValides.length === 0) {
+      setErreur('Aucune ligne valide à importer.');
+      return;
+    }
+
+    setConfirmationEnCours(true);
+    try {
+      await appelApi('POST', '/stock/import/confirmer', {
+        lieuId: Number(lieuId),
+        fournisseur: fournisseur.trim() || undefined,
+        lignes: lignesValides.map((l) => ({
+          reference: l.reference,
+          codeBarre: l.codeBarre || undefined,
+          designation: l.designation,
+          quantite: l.quantite,
+          prixAchat: l.prixAchat,
+          prixVente: l.prixVente || undefined,
+          articleId: l.articleId || undefined,
+        })),
+      });
+      setSucces(`Import réussi : ${lignesValides.length} article(s) traité(s), stock mis à jour.`);
+      setApercu(null);
+      setFichier(null);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setConfirmationEnCours(false);
+    }
+  }
+
+  return (
+    <div style={styles.carte}>
+      <h3 style={styles.titreCarte}>Import Excel de stock</h3>
+      <p style={styles.texteMuet}>
+        Colonnes attendues dans le fichier : Référence, CodeBarre (optionnel), Désignation, Quantité, PrixAchat, PrixVente (requis seulement pour un nouvel article).
+      </p>
+
+      {erreur && <div style={styles.bandeauErreur}>{erreur}</div>}
+      {succes && <div style={styles.bandeauConfirmation}>{succes}</div>}
+
+      <div style={styles.ligneChamps}>
+        <label style={styles.champLabel}>
+          Lieu de réception
+          <select style={styles.champInput} value={lieuId} onChange={(e) => setLieuId(e.target.value)}>
+            <option value="">—</option>
+            {lieux.map((l) => (
+              <option key={l.id} value={l.id}>{l.nom}</option>
+            ))}
+          </select>
+        </label>
+        <label style={styles.champLabel}>
+          Fournisseur
+          <input
+            style={styles.champInput}
+            value={fournisseur}
+            onChange={(e) => setFournisseur(e.target.value)}
+            placeholder="Optionnel…"
+          />
+        </label>
+      </div>
+
+      <div style={styles.ligneChamps}>
+        <input type="file" accept=".xlsx,.xls" onChange={gererChoixFichier} />
+        <button onClick={analyserFichier} disabled={lectureEnCours || !fichier} style={styles.boutonAjouter}>
+          {lectureEnCours ? 'Lecture…' : 'Analyser le fichier'}
+        </button>
+      </div>
+
+      {apercu && (
+        <>
+          <p style={styles.texteMuet}>
+            {apercu.nombreLignes} ligne(s) lues — {lignesValides.length} valide(s), {lignesEnErreur.length} en erreur.
+          </p>
+
+          <div style={styles.tableauScroll}>
+            <table style={styles.tableau}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Référence</th>
+                  <th style={styles.th}>Désignation</th>
+                  <th style={styles.th}>Qté</th>
+                  <th style={styles.th}>Prix achat</th>
+                  <th style={styles.th}>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {apercu.lignes.map((l, index) => (
+                  <tr key={index}>
+                    <td style={styles.td}>{l.reference || '—'}</td>
+                    <td style={styles.td}>{l.designation || '—'}</td>
+                    <td style={styles.td}>{l.quantite ?? '—'}</td>
+                    <td style={styles.td}>{l.prixAchat != null ? l.prixAchat.toLocaleString('fr-FR') : '—'}</td>
+                    <td style={styles.td}>
+                      {l.statut === 'ERREUR' && <span style={{ color: 'var(--error)', fontWeight: 600 }}>{l.erreur}</span>}
+                      {l.statut === 'NOUVEL_ARTICLE' && <span style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>Nouvel article</span>}
+                      {l.statut === 'ARTICLE_EXISTANT' && <span style={{ color: '#1E6B36', fontWeight: 600 }}>Article existant</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <button
+            onClick={confirmerImport}
+            disabled={confirmationEnCours || lignesValides.length === 0}
+            style={{ ...styles.boutonValider, marginTop: 14 }}
+          >
+            {confirmationEnCours ? 'Import en cours…' : `Confirmer l'import (${lignesValides.length} article(s))`}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
 const styles = {
   page: { padding: 32, fontFamily: 'var(--font-body)', color: 'var(--brown-ink)' },
   enTete: { display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20, flexWrap: 'wrap' },
