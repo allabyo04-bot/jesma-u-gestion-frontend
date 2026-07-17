@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { appelApi, getUtilisateur } from '../lib/api';
 
@@ -87,8 +87,10 @@ export default function Etats() {
   const [raccourciActif, setRaccourciActif] = useState('aujourdhui');
 
   const [donnees, setDonnees] = useState(null);
+  const [ongletDonnees, setOngletDonnees] = useState(null); // à quel onglet correspondent les données actuelles
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState('');
+  const compteurRequete = useRef(0);
 
   const [dateFermeture, setDateFermeture] = useState(formatDate(new Date()));
   const [fermeture, setFermeture] = useState(null);
@@ -116,9 +118,13 @@ export default function Etats() {
 
   async function chargerOnglet() {
     if (ongletActif === 'fermeture') return;
+    // Compteur de requêtes : si une réponse plus ancienne arrive après une plus récente
+    // (ex: clics rapides entre onglets), on l'ignore pour ne jamais afficher des données
+    // qui ne correspondent pas à l'onglet actuellement affiché.
+    const idRequete = ++compteurRequete.current;
+    const ongletDemande = ongletActif;
     setChargement(true);
     setErreur('');
-    setDonnees(null);
     try {
       const cheminParOnglet = {
         date: '/etats/par-date',
@@ -129,12 +135,19 @@ export default function Etats() {
       };
       const params = new URLSearchParams({ dateDebut, dateFin });
       if (lieuId) params.set('lieuId', lieuId);
-      const reponse = await appelApi('GET', `${cheminParOnglet[ongletActif]}?${params.toString()}`);
-      setDonnees(reponse);
+      const reponse = await appelApi('GET', `${cheminParOnglet[ongletDemande]}?${params.toString()}`);
+      if (idRequete === compteurRequete.current) {
+        setDonnees(reponse);
+        setOngletDonnees(ongletDemande);
+      }
     } catch (err) {
-      setErreur(err.message);
+      if (idRequete === compteurRequete.current) {
+        setErreur(err.message);
+      }
     } finally {
-      setChargement(false);
+      if (idRequete === compteurRequete.current) {
+        setChargement(false);
+      }
     }
   }
 
@@ -161,6 +174,9 @@ export default function Etats() {
   useEffect(() => {
     if (ongletActif === 'fermeture') chargerFermeture();
   }, [ongletActif, dateFermeture, lieuId]);
+
+  // N'affiche les données que si elles correspondent bien à l'onglet actuellement sélectionné.
+  const donneesAJour = donnees && ongletDonnees === ongletActif ? donnees : null;
 
   return (
     <div style={styles.page}>
@@ -304,12 +320,12 @@ export default function Etats() {
           {erreur && <div style={styles.bandeauErreur}>{erreur}</div>}
           {chargement && <p style={styles.texteMuet}>Chargement…</p>}
 
-          {donnees && ongletActif === 'date' && (
+          {donneesAJour && ongletActif === 'date' && (
             <div style={styles.tableauWrapper}>
               <p style={styles.texteMuet}>
-                {donnees.nombreVentes} vente(s) — Total : {donnees.total.toLocaleString('fr-FR')} F
+                {donneesAJour.nombreVentes} vente(s) — Total : {donneesAJour.total.toLocaleString('fr-FR')} F
               </p>
-              {donnees.ventes.map((v) => (
+              {donneesAJour.ventes.map((v) => (
                 <div key={v.id} style={styles.carteAttente}>
                   <div style={styles.enTeteCarteAttente}>
                     <span style={{ fontWeight: 700 }}>{v.numero} — {Number(v.totalNet).toLocaleString('fr-FR')} F</span>
@@ -320,44 +336,44 @@ export default function Etats() {
                   </div>
                 </div>
               ))}
-              {donnees.ventes.length === 0 && <p style={styles.texteMuet}>Aucune vente sur cette période.</p>}
+              {donneesAJour.ventes.length === 0 && <p style={styles.texteMuet}>Aucune vente sur cette période.</p>}
             </div>
           )}
 
-          {donnees && ongletActif === 'mode' && (
+          {donneesAJour && ongletActif === 'mode' && (
             <div style={styles.cartesRecap}>
               <div style={{ ...styles.carte, gridColumn: '1 / -1' }}>
                 <div style={styles.carteLabel}>Total encaissé</div>
-                <div style={styles.carteValeur}>{donnees.total.toLocaleString('fr-FR')} F</div>
+                <div style={styles.carteValeur}>{donneesAJour.total.toLocaleString('fr-FR')} F</div>
               </div>
-              {donnees.resultats.map((r) => (
+              {donneesAJour.resultats.map((r) => (
                 <div key={r.mode} style={styles.carte}>
                   <div style={styles.carteLabel}>{r.mode}</div>
                   <div style={styles.carteValeur}>{r.montant.toLocaleString('fr-FR')} F</div>
                 </div>
               ))}
-              {donnees.resultats.length === 0 && <p style={styles.texteMuet}>Aucun paiement sur cette période.</p>}
+              {donneesAJour.resultats.length === 0 && <p style={styles.texteMuet}>Aucun paiement sur cette période.</p>}
             </div>
           )}
 
-          {donnees && ongletActif === 'type' && (
+          {donneesAJour && ongletActif === 'type' && (
             <div style={styles.cartesRecap}>
               <div style={styles.carte}>
                 <div style={styles.carteLabel}>Comptant</div>
-                <div style={styles.carteValeur}>{donnees.comptant.total.toLocaleString('fr-FR')} F</div>
-                <div style={styles.texteMuet}>{donnees.comptant.nombre} vente(s)</div>
+                <div style={styles.carteValeur}>{donneesAJour.comptant.total.toLocaleString('fr-FR')} F</div>
+                <div style={styles.texteMuet}>{donneesAJour.comptant.nombre} vente(s)</div>
               </div>
               <div style={styles.carte}>
                 <div style={styles.carteLabel}>Crédit</div>
-                <div style={styles.carteValeur}>{donnees.credit.total.toLocaleString('fr-FR')} F</div>
-                <div style={styles.texteMuet}>{donnees.credit.nombre} vente(s)</div>
+                <div style={styles.carteValeur}>{donneesAJour.credit.total.toLocaleString('fr-FR')} F</div>
+                <div style={styles.texteMuet}>{donneesAJour.credit.nombre} vente(s)</div>
               </div>
             </div>
           )}
 
-          {donnees && ongletActif === 'vendeur' && (
+          {donneesAJour && ongletActif === 'vendeur' && (
             <div style={styles.tableauWrapper}>
-              {donnees.resultats.map((v, i) => (
+              {donneesAJour.resultats.map((v, i) => (
                 <div key={v.vendeurId} style={styles.carteAttente}>
                   <div style={styles.enTeteCarteAttente}>
                     <span style={{ fontWeight: 700 }}>{i + 1}. {v.nom}</span>
@@ -366,28 +382,28 @@ export default function Etats() {
                   <div style={styles.texteMuet}>{v.nombreVentes} vente(s)</div>
                 </div>
               ))}
-              {donnees.resultats.length === 0 && <p style={styles.texteMuet}>Aucune vente sur cette période.</p>}
+              {donneesAJour.resultats.length === 0 && <p style={styles.texteMuet}>Aucune vente sur cette période.</p>}
             </div>
           )}
 
-          {donnees && ongletActif === 'boutique' && estAdmin && (
+          {donneesAJour && ongletActif === 'boutique' && estAdmin && (
             <div style={styles.cartesRecap}>
               <div style={styles.carte}>
                 <div style={styles.carteLabel}>Ventes</div>
-                <div style={styles.carteValeur}>{donnees.totalVentes.toLocaleString('fr-FR')} F</div>
-                <div style={styles.texteMuet}>{donnees.nombreVentes} vente(s)</div>
+                <div style={styles.carteValeur}>{donneesAJour.totalVentes.toLocaleString('fr-FR')} F</div>
+                <div style={styles.texteMuet}>{donneesAJour.nombreVentes} vente(s)</div>
               </div>
               <div style={styles.carte}>
                 <div style={styles.carteLabel}>Remises accordées</div>
-                <div style={styles.carteValeur}>{donnees.totalRemises.toLocaleString('fr-FR')} F</div>
+                <div style={styles.carteValeur}>{donneesAJour.totalRemises.toLocaleString('fr-FR')} F</div>
               </div>
               <div style={styles.carte}>
                 <div style={styles.carteLabel}>Dépenses</div>
-                <div style={styles.carteValeur}>{donnees.totalDepenses.toLocaleString('fr-FR')} F</div>
+                <div style={styles.carteValeur}>{donneesAJour.totalDepenses.toLocaleString('fr-FR')} F</div>
               </div>
               <div style={styles.carte}>
                 <div style={styles.carteLabel}>Résultat net</div>
-                <div style={styles.carteValeur}>{donnees.resultatNet.toLocaleString('fr-FR')} F</div>
+                <div style={styles.carteValeur}>{donneesAJour.resultatNet.toLocaleString('fr-FR')} F</div>
               </div>
             </div>
           )}
