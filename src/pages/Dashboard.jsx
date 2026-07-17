@@ -43,6 +43,9 @@ export default function Dashboard() {
   <button onClick={() => navigate('/cartes-cadeaux')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
     Cartes cadeaux
   </button>
+<button onClick={() => navigate('/depenses')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+    Dépenses
+  </button>
   <button onClick={() => navigate('/listes-cadeaux')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
     Listes cadeaux
   </button>

@@ -10,6 +10,7 @@ import ListesCadeaux from './pages/ListesCadeaux.jsx';
 import ListeCadeauPublique from './pages/ListeCadeauPublique.jsx';
 import Etats from './pages/Etats.jsx';
 import Utilisateurs from './pages/Utilisateurs.jsx';
+import Depenses from './pages/Depenses.jsx';
 
 function estConnecte() {
   return !!localStorage.getItem('jesma_token');
@@ -80,10 +81,10 @@ export default function App() {
         }
       />
       <Route
-        path="/listes-cadeaux"
+        path="/depenses"
         element={
           <RouteProtegee>
-            <ListesCadeaux />
+            <Depenses />
           </RouteProtegee>
         }
       />
