@@ -2,15 +2,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { appelApi, getUtilisateur } from '../lib/api';
 
-const ONGLETS = [
-  { id: 'date', label: 'Par date' },
-  { id: 'mode', label: 'Par mode de paiement' },
-  { id: 'type', label: 'Par type' },
-  { id: 'vendeur', label: 'Meilleur vendeur' },
-  { id: 'boutique', label: 'Récap boutiques' },
-  { id: 'fermeture', label: 'Fermeture de caisse' },
-];
-
 function formatDate(d) {
   return d.toISOString().slice(0, 10);
 }
@@ -29,10 +20,63 @@ function debutMois() {
   return d;
 }
 
+function imprimerFermetureCaisse(fermeture, lieuNom) {
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Fermeture de caisse — ${fermeture.date}</title>
+<style>
+  @page { size: 80mm auto; margin: 0; }
+  body { font-family: 'Courier New', monospace; width: 76mm; margin: 4mm auto; font-size: 12px; color: #000; }
+  .centre { text-align: center; }
+  h1 { font-size: 16px; margin: 0 0 2px 0; }
+  hr { border: none; border-top: 1px dashed #000; margin: 8px 0; }
+  .ligne { display: flex; justify-content: space-between; margin: 2px 0; }
+  .total { font-weight: bold; font-size: 14px; margin-top: 6px; }
+  .section-titre { font-weight: bold; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <div class="centre">
+    <h1>JESMA U</h1>
+    <div>${lieuNom || 'Toutes les boutiques'}</div>
+    <div>Fermeture de caisse — ${fermeture.date}</div>
+  </div>
+  <hr>
+  <div class="ligne"><span>Nombre de ventes</span><span>${fermeture.nombreVentes}</span></div>
+  <div class="section-titre">Encaissements par mode</div>
+  ${fermeture.parModePaiement.map((m) => `<div class="ligne"><span>${m.mode}</span><span>${m.montant.toLocaleString('fr-FR')} F</span></div>`).join('')}
+  <hr>
+  <div class="ligne total"><span>Total encaissé</span><span>${fermeture.totalEncaisse.toLocaleString('fr-FR')} F</span></div>
+  <div class="ligne"><span>Dépenses du jour</span><span>${fermeture.totalDepenses.toLocaleString('fr-FR')} F</span></div>
+  <div class="ligne total"><span>Résultat net</span><span>${fermeture.resultatNet.toLocaleString('fr-FR')} F</span></div>
+  <hr>
+  <div class="section-titre">Avoirs</div>
+  <div class="ligne"><span>Émis (${fermeture.avoirsEmis.nombre})</span><span>${fermeture.avoirsEmis.montant.toLocaleString('fr-FR')} F</span></div>
+  <div class="ligne"><span>Utilisés (${fermeture.avoirsUtilises.nombre})</span><span>${fermeture.avoirsUtilises.montant.toLocaleString('fr-FR')} F</span></div>
+  <script>window.onload = () => window.print();</script>
+</body>
+</html>`;
+  const fenetre = window.open('', '_blank', 'width=380,height=600');
+  if (!fenetre) return;
+  fenetre.document.write(html);
+  fenetre.document.close();
+}
+
 export default function Etats() {
   const navigate = useNavigate();
   const utilisateur = getUtilisateur();
   const estAdmin = utilisateur?.role === 'ADMIN';
+
+  const ONGLETS = [
+    { id: 'date', label: 'Par date' },
+    { id: 'mode', label: 'Par mode de paiement' },
+    { id: 'type', label: 'Par type' },
+    { id: 'vendeur', label: 'Meilleur vendeur' },
+    ...(estAdmin ? [{ id: 'boutique', label: 'Récap boutiques' }] : []),
+    { id: 'fermeture', label: 'Fermeture de caisse' },
+  ];
 
   const [ongletActif, setOngletActif] = useState('date');
   const [lieux, setLieux] = useState([]);
@@ -68,7 +112,6 @@ export default function Etats() {
       setDateDebut(formatDate(debutMois()));
       setDateFin(formatDate(aujourdhui));
     }
-    // 'personnalise' : on ne touche pas aux dates, la caissière/Victoria les choisit elle-même
   }
 
   async function chargerOnglet() {
@@ -96,8 +139,8 @@ export default function Etats() {
   }
 
   useEffect(() => {
-    if (estAdmin) chargerOnglet();
-  }, [ongletActif, dateDebut, dateFin, lieuId, estAdmin]);
+    chargerOnglet();
+  }, [ongletActif, dateDebut, dateFin, lieuId]);
 
   async function chargerFermeture() {
     setFermetureChargement(true);
@@ -116,17 +159,8 @@ export default function Etats() {
   }
 
   useEffect(() => {
-    if (estAdmin && ongletActif === 'fermeture') chargerFermeture();
-  }, [ongletActif, dateFermeture, lieuId, estAdmin]);
-
-  if (!estAdmin) {
-    return (
-      <div style={styles.page}>
-        <button onClick={() => navigate('/dashboard')} style={styles.boutonRetour}>← Tableau de bord</button>
-        <p style={{ marginTop: 24 }}>Cet écran est réservé aux administrateurs.</p>
-      </div>
-    );
-  }
+    if (ongletActif === 'fermeture') chargerFermeture();
+  }, [ongletActif, dateFermeture, lieuId]);
 
   return (
     <div style={styles.page}>
@@ -196,15 +230,25 @@ export default function Etats() {
             </label>
           </>
         ) : (
-          <label style={styles.champLabel}>
-            Date
-            <input
-              type="date"
-              style={styles.champInput}
-              value={dateFermeture}
-              onChange={(e) => setDateFermeture(e.target.value)}
-            />
-          </label>
+          <>
+            <label style={styles.champLabel}>
+              Date
+              <input
+                type="date"
+                style={styles.champInput}
+                value={dateFermeture}
+                onChange={(e) => setDateFermeture(e.target.value)}
+              />
+            </label>
+            {fermeture && (
+              <button
+                onClick={() => imprimerFermetureCaisse(fermeture, lieux.find((l) => String(l.id) === String(lieuId))?.nom)}
+                style={styles.boutonImprimer}
+              >
+                🖨️ Imprimer
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -326,7 +370,7 @@ export default function Etats() {
             </div>
           )}
 
-          {donnees && ongletActif === 'boutique' && (
+          {donnees && ongletActif === 'boutique' && estAdmin && (
             <div style={styles.cartesRecap}>
               <div style={styles.carte}>
                 <div style={styles.carteLabel}>Ventes</div>
@@ -367,6 +411,7 @@ const styles = {
   raccourcis: { display: 'flex', gap: 6 },
   filtreActif: { padding: '6px 14px', borderRadius: 20, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 13 },
   filtreInactif: { padding: '6px 14px', borderRadius: 20, border: '1px solid var(--cream-deep)', background: 'transparent', cursor: 'pointer', fontSize: 13 },
+  boutonImprimer: { padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 13, height: 38 },
   texteMuet: { fontSize: 13, color: 'var(--brown-soft)' },
   bandeauErreur: { padding: '10px 14px', borderRadius: 8, background: '#FBE4E1', color: 'var(--error)', fontSize: 14, fontWeight: 600 },
   tableauWrapper: { display: 'flex', flexDirection: 'column', gap: 10 },
