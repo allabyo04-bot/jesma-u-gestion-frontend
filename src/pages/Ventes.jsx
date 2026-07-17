@@ -106,6 +106,7 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
 </body>
 </html>`;
 }
+
 function imprimerTicketDepuisHtml(html) {
   const fenetre = window.open('', '_blank', 'width=380,height=600');
   if (!fenetre) return;
@@ -139,7 +140,7 @@ export default function Ventes() {
 
   // --- Avoir utilisé en paiement sur la nouvelle vente ---
   const [codeAvoir, setCodeAvoir] = useState('');
-  const [avoirVerifie, setAvoirVerifie] = useState(null); // { reference, montant, statut, ... }
+  const [avoirVerifie, setAvoirVerifie] = useState(null);
   const [avoirVerificationEnCours, setAvoirVerificationEnCours] = useState(false);
   const [erreurAvoir, setErreurAvoir] = useState('');
 
@@ -171,6 +172,15 @@ export default function Ventes() {
   const [retourEnCours, setRetourEnCours] = useState(false);
   const [erreurRetour, setErreurRetour] = useState('');
   const [avoirCree, setAvoirCree] = useState(null);
+
+  // --- Historique + demandes d'annulation ---
+  const [historiqueVentes, setHistoriqueVentes] = useState([]);
+  const [historiqueChargement, setHistoriqueChargement] = useState(false);
+  const [erreurHistorique, setErreurHistorique] = useState('');
+  const [demandesAnnulation, setDemandesAnnulation] = useState([]);
+  const [demandeAnnulationOuverte, setDemandeAnnulationOuverte] = useState(null);
+  const [motifAnnulationSaisi, setMotifAnnulationSaisi] = useState('');
+  const [actionAnnulationEnCours, setActionAnnulationEnCours] = useState(false);
 
   useEffect(() => {
     appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
@@ -235,8 +245,6 @@ export default function Ventes() {
     }
   }
 
-  // --- Avoir en paiement : vérification ---
-
   async function verifierAvoir() {
     const code = codeAvoir.trim();
     if (!code) return;
@@ -263,8 +271,6 @@ export default function Ventes() {
     setAvoirVerifie(null);
     setErreurAvoir('');
   }
-
-  // --- Retours / Échanges : logique ---
 
   async function gererRechercheRetour(e) {
     e.preventDefault();
@@ -304,6 +310,76 @@ export default function Ventes() {
     setVenteOrigine(null);
     setLignesRetour([]);
     setErreurRetour('');
+  }
+
+  // --- Historique + demandes d'annulation : logique ---
+
+  function chargerHistorique() {
+    setHistoriqueChargement(true);
+    setErreurHistorique('');
+    appelApi('GET', '/ventes')
+      .then(setHistoriqueVentes)
+      .catch((err) => setErreurHistorique(err.message))
+      .finally(() => setHistoriqueChargement(false));
+  }
+
+  function chargerDemandesAnnulation() {
+    if (!estAdmin) return;
+    appelApi('GET', '/ventes/demandes-annulation')
+      .then(setDemandesAnnulation)
+      .catch(() => {});
+  }
+
+  useEffect(() => {
+    if (ongletActif === 'historique') {
+      chargerHistorique();
+      chargerDemandesAnnulation();
+    }
+  }, [ongletActif]);
+
+  function ouvrirDemandeAnnulation(venteId) {
+    setDemandeAnnulationOuverte(venteId);
+    setMotifAnnulationSaisi('');
+  }
+
+  async function envoyerDemandeAnnulation(venteId) {
+    setActionAnnulationEnCours(true);
+    try {
+      await appelApi('POST', `/ventes/${venteId}/demander-annulation`, { motif: motifAnnulationSaisi || undefined });
+      setDemandeAnnulationOuverte(null);
+      chargerHistorique();
+      chargerDemandesAnnulation();
+    } catch (err) {
+      setErreurHistorique(err.message);
+    } finally {
+      setActionAnnulationEnCours(false);
+    }
+  }
+
+  async function confirmerAnnulation(venteId, motif) {
+    setActionAnnulationEnCours(true);
+    try {
+      await appelApi('POST', `/ventes/${venteId}/annuler`, { motif });
+      chargerHistorique();
+      chargerDemandesAnnulation();
+    } catch (err) {
+      setErreurHistorique(err.message);
+    } finally {
+      setActionAnnulationEnCours(false);
+    }
+  }
+
+  async function refuserDemande(venteId) {
+    setActionAnnulationEnCours(true);
+    try {
+      await appelApi('POST', `/ventes/${venteId}/rejeter-annulation`);
+      chargerHistorique();
+      chargerDemandesAnnulation();
+    } catch (err) {
+      setErreurHistorique(err.message);
+    } finally {
+      setActionAnnulationEnCours(false);
+    }
   }
 
   function changerQuantiteRetour(articleId, quantite) {
@@ -565,8 +641,6 @@ export default function Ventes() {
         paiements: paiements.map((p) => ({ mode: p.mode, montant: p.montant })),
       });
 
-      // Le ticket est construit ici, avant réinitialisation du panier, pendant qu'on a
-      // encore toutes les infos (désignations, boutique, vendeur) sous la main.
       const lieuNom = lieux.find((l) => String(l.id) === String(lieuId))?.nom;
       const vendeurNom = vendeurs.find((v) => String(v.id) === String(vendeurId))?.nomComplet;
       const ticketHtml = construireTicketHtml({
@@ -620,6 +694,9 @@ export default function Ventes() {
               )}
               {onglet.id === 'credit' && creditFiltre === 'EN_COURS' && creditVentes.length > 0 && (
                 <span style={styles.badgeCompteur}> ({creditVentes.length})</span>
+              )}
+              {onglet.id === 'historique' && estAdmin && demandesAnnulation.length > 0 && (
+                <span style={styles.badgeCompteur}> ({demandesAnnulation.length})</span>
               )}
             </div>
           ))}
@@ -753,6 +830,100 @@ export default function Ventes() {
                         </button>
                       </div>
                     )
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : ongletActif === 'historique' ? (
+          <>
+            <h2 style={styles.titreOnglet}>Historique des ventes</h2>
+
+            {erreurHistorique && <div style={styles.bandeauErreur}>{erreurHistorique}</div>}
+
+            {estAdmin && demandesAnnulation.length > 0 && (
+              <div style={{ ...styles.carteAttente, background: '#FBE4E1', maxWidth: 700 }}>
+                <div style={{ fontWeight: 700, color: 'var(--error)' }}>
+                  ⚠ {demandesAnnulation.length} demande(s) d'annulation en attente
+                </div>
+                {demandesAnnulation.map((v) => (
+                  <div key={v.id} style={{ ...styles.carteAttente, background: 'var(--white)', marginTop: 8 }}>
+                    <div style={styles.enTeteCarteAttente}>
+                      <span style={{ fontWeight: 700 }}>{v.numero} — {Number(v.totalNet).toLocaleString('fr-FR')} F</span>
+                      <span style={styles.texteMuet}>{v.demandeurAnnulation?.nomComplet}</span>
+                    </div>
+                    <div style={styles.texteMuet}>
+                      Motif : {v.motifDemandeAnnulation || 'Non précisé'}
+                    </div>
+                    <div style={styles.boutonsCarteAttente}>
+                      <button
+                        onClick={() => confirmerAnnulation(v.id, v.motifDemandeAnnulation)}
+                        disabled={actionAnnulationEnCours}
+                        style={styles.boutonValider}
+                      >
+                        Annuler la vente
+                      </button>
+                      <button
+                        onClick={() => refuserDemande(v.id)}
+                        disabled={actionAnnulationEnCours}
+                        style={styles.boutonRetirer}
+                      >
+                        Refuser
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {historiqueChargement && <p style={styles.texteMuet}>Chargement…</p>}
+            {!historiqueChargement && historiqueVentes.length === 0 && (
+              <p style={styles.texteMuet}>Aucune vente pour l'instant.</p>
+            )}
+
+            <div style={styles.listeAttente}>
+              {historiqueVentes.map((v) => (
+                <div key={v.id} style={styles.carteAttente}>
+                  <div style={styles.enTeteCarteAttente}>
+                    <span style={{ fontWeight: 700 }}>{v.numero} — {Number(v.totalNet).toLocaleString('fr-FR')} F</span>
+                    <span style={styles.texteMuet}>{new Date(v.createdAt).toLocaleString('fr-FR')}</span>
+                  </div>
+                  <div style={styles.texteMuet}>
+                    {v.lieu?.nom} — {v.vendeur ? v.vendeur.nomComplet : '—'} — {v.typeVente === 'CREDIT' ? 'Crédit' : 'Comptant'}
+                  </div>
+                  <div style={styles.texteMuet}>
+                    {v.lignes.map((l) => `${l.article.designation} ×${l.quantite}`).join(', ')}
+                  </div>
+
+                  {v.statut === 'ANNULEE' ? (
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--error)' }}>Vente annulée</span>
+                  ) : v.demandeAnnulationEnCours ? (
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-deep)' }}>Demande d'annulation en attente</span>
+                  ) : demandeAnnulationOuverte === v.id ? (
+                    <div style={styles.ajoutPaiement}>
+                      <input
+                        style={styles.champInput}
+                        placeholder="Motif (optionnel)…"
+                        value={motifAnnulationSaisi}
+                        onChange={(e) => setMotifAnnulationSaisi(e.target.value)}
+                      />
+                      <button
+                        onClick={() => envoyerDemandeAnnulation(v.id)}
+                        disabled={actionAnnulationEnCours}
+                        style={styles.boutonAjouterPaiement}
+                      >
+                        Envoyer
+                      </button>
+                      <button onClick={() => setDemandeAnnulationOuverte(null)} style={styles.boutonRetirer}>
+                        Annuler
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={styles.boutonsCarteAttente}>
+                      <button onClick={() => ouvrirDemandeAnnulation(v.id)} style={styles.boutonReprendre}>
+                        Demander l'annulation
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
