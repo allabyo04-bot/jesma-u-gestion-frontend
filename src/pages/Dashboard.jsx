@@ -30,9 +30,11 @@ export default function Dashboard() {
   <button onClick={() => navigate('/articles')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
     Articles
   </button>
-  <button onClick={() => navigate('/stock')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
-    Stock
-  </button>
+  {utilisateur?.role === 'ADMIN' && (
+    <button onClick={() => navigate('/stock')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+      Stock
+    </button>
+  )}
   <button onClick={() => navigate('/etats')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
     États
   </button>
@@ -50,8 +52,7 @@ export default function Dashboard() {
   <button onClick={deconnexion} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: 'transparent', cursor: 'pointer' }}>
     Déconnexion
   </button>
-</div>
-      </div>
+</div>      </div>
 
       {erreur && <p style={{ color: '#B23A2E' }}>{erreur}</p>}
 
