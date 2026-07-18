@@ -4,6 +4,7 @@ import { appelApi } from '../lib/api';
 
 const ONGLETS = [
   { id: 'lieux', label: 'Lieux' },
+  { id: 'vendeurs', label: 'Vendeurs' },
   { id: 'denominations', label: 'Dénominations cartes cadeaux' },
   { id: 'categories', label: 'Catégories de dépenses' },
 ];
@@ -32,6 +33,7 @@ export default function Parametres() {
       </div>
 
       {ongletActif === 'lieux' && <OngletLieux />}
+      {ongletActif === 'vendeurs' && <OngletVendeurs />}
       {ongletActif === 'denominations' && <OngletDenominations />}
       {ongletActif === 'categories' && <OngletCategories />}
     </div>
@@ -146,6 +148,133 @@ function OngletLieux() {
           <option value="ENTREPOT">Entrepôt</option>
         </select>
         <button type="submit" disabled={creationEnCours || !nom.trim()} style={styles.boutonAjouter}>
+          {creationEnCours ? 'Création…' : '+ Ajouter'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
+// ONGLET VENDEURS
+// ------------------------------------------------------------
+function OngletVendeurs() {
+  const [vendeurs, setVendeurs] = useState([]);
+  const [chargement, setChargement] = useState(true);
+  const [erreur, setErreur] = useState('');
+  const [nomComplet, setNomComplet] = useState('');
+  const [telephone, setTelephone] = useState('');
+  const [creationEnCours, setCreationEnCours] = useState(false);
+  const [editionId, setEditionId] = useState(null);
+  const [nomEdition, setNomEdition] = useState('');
+  const [telephoneEdition, setTelephoneEdition] = useState('');
+
+  useEffect(() => { chargerVendeurs(); }, []);
+
+  function chargerVendeurs() {
+    setChargement(true);
+    appelApi('GET', '/vendeurs/tous')
+      .then(setVendeurs)
+      .catch((err) => setErreur(err.message))
+      .finally(() => setChargement(false));
+  }
+
+  async function creerVendeurLocal(e) {
+    e.preventDefault();
+    if (!nomComplet.trim()) return;
+    setErreur('');
+    setCreationEnCours(true);
+    try {
+      await appelApi('POST', '/vendeurs', { nomComplet: nomComplet.trim(), telephone: telephone.trim() || null });
+      setNomComplet('');
+      setTelephone('');
+      chargerVendeurs();
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setCreationEnCours(false);
+    }
+  }
+
+  function ouvrirEdition(vendeur) {
+    setEditionId(vendeur.id);
+    setNomEdition(vendeur.nomComplet);
+    setTelephoneEdition(vendeur.telephone || '');
+  }
+
+  async function enregistrerEdition(vendeur) {
+    setErreur('');
+    try {
+      await appelApi('PUT', `/vendeurs/${vendeur.id}`, {
+        nomComplet: nomEdition.trim(),
+        telephone: telephoneEdition.trim() || null,
+      });
+      setEditionId(null);
+      chargerVendeurs();
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  async function basculerActif(vendeur) {
+    setErreur('');
+    try {
+      await appelApi('PUT', `/vendeurs/${vendeur.id}`, { actif: !vendeur.actif });
+      chargerVendeurs();
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  return (
+    <div style={styles.carte}>
+      {erreur && <div style={styles.bandeauErreur}>{erreur}</div>}
+      {chargement && <p style={styles.texteMuet}>Chargement…</p>}
+
+      {!chargement && (
+        <div style={styles.listeSimple}>
+          {vendeurs.map((v) => (
+            <div key={v.id} style={styles.ligneItem}>
+              {editionId === v.id ? (
+                <>
+                  <input style={styles.champInput} value={nomEdition} onChange={(e) => setNomEdition(e.target.value)} placeholder="Nom complet" />
+                  <input style={styles.champInput} value={telephoneEdition} onChange={(e) => setTelephoneEdition(e.target.value)} placeholder="Téléphone (optionnel)" />
+                  <button onClick={() => enregistrerEdition(v)} style={styles.boutonValiderPetit}>Enregistrer</button>
+                  <button onClick={() => setEditionId(null)} style={styles.boutonAnnulerPetit}>Annuler</button>
+                </>
+              ) : (
+                <>
+                  <span style={{ flex: 1, opacity: v.actif ? 1 : 0.5 }}>
+                    <strong>{v.nomComplet}</strong>
+                    {v.telephone && <span style={styles.texteMuet}> — {v.telephone}</span>}
+                    {!v.actif && <span style={styles.texteMuet}> (désactivé)</span>}
+                  </span>
+                  <button onClick={() => ouvrirEdition(v)} style={styles.boutonModifier}>✏️</button>
+                  <button onClick={() => basculerActif(v)} style={v.actif ? styles.boutonRetirer : styles.boutonValiderPetit}>
+                    {v.actif ? 'Désactiver' : 'Activer'}
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+          {vendeurs.length === 0 && <p style={styles.texteMuet}>Aucun vendeur pour l'instant.</p>}
+        </div>
+      )}
+
+      <form onSubmit={creerVendeurLocal} style={styles.formAjout}>
+        <input
+          style={styles.champInput}
+          placeholder="Nom complet du vendeur…"
+          value={nomComplet}
+          onChange={(e) => setNomComplet(e.target.value)}
+        />
+        <input
+          style={styles.champInput}
+          placeholder="Téléphone (optionnel)"
+          value={telephone}
+          onChange={(e) => setTelephone(e.target.value)}
+        />
+        <button type="submit" disabled={creationEnCours || !nomComplet.trim()} style={styles.boutonAjouter}>
           {creationEnCours ? 'Création…' : '+ Ajouter'}
         </button>
       </form>
