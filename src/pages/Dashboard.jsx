@@ -59,6 +59,11 @@ export default function Dashboard() {
               Rôles
             </button>
           )}
+          {utilisateur?.role === 'ADMIN' && (
+            <button onClick={() => navigate('/parametres')} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144', color: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}>
+              Paramètres
+            </button>
+          )}
           <button onClick={deconnexion} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #D9A144', background: 'transparent', cursor: 'pointer' }}>
             Déconnexion
           </button>
