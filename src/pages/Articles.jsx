@@ -15,6 +15,12 @@ export default function Articles() {
   const [nombreAImprimer, setNombreAImprimer] = useState(0);
 
   useEffect(() => {
+    chargerDonnees();
+    rafraichirCompteurImpression();
+  }, []);
+
+  function chargerDonnees() {
+    setChargement(true);
     Promise.all([appelApi('GET', '/articles'), appelApi('GET', '/familles')])
       .then(([listeArticles, listeFamilles]) => {
         setArticles(listeArticles);
@@ -22,8 +28,7 @@ export default function Articles() {
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false));
-    rafraichirCompteurImpression();
-  }, []);
+  }
 
   function rafraichirCompteurImpression() {
     appelApi('GET', '/articles/a-imprimer')
@@ -103,6 +108,7 @@ export default function Articles() {
           familles={familles}
           articleEnEdition={articleEnEdition}
           onFermer={() => setFormulaireOuvert(false)}
+          onFamillesMisesAJour={setFamilles}
           onCree={(article) => {
             ajouterArticleALaListe(article);
             setFormulaireOuvert(false);
@@ -200,11 +206,10 @@ function CarteArticle({ article, onPhotoMiseAJour, onCodeBarreGenere, onModifier
   );
 }
 
-function FormulaireArticle({ familles, articleEnEdition, onFermer, onCree, onModifie }) {
+function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMisesAJour, onCree, onModifie }) {
   const estEdition = !!articleEnEdition;
 
   const [designation, setDesignation] = useState(articleEnEdition?.designation || '');
-  const [reference, setReference] = useState(articleEnEdition?.reference || '');
   const [codeBarre, setCodeBarre] = useState(articleEnEdition?.codeBarre || '');
   const [codeInterne, setCodeInterne] = useState(articleEnEdition?.codeInterne || '');
   const [familleId, setFamilleId] = useState(articleEnEdition?.familleId ? String(articleEnEdition.familleId) : '');
@@ -215,15 +220,66 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onCree, onMod
   const [erreur, setErreur] = useState('');
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
 
+  const [nouvelleFamilleOuverte, setNouvelleFamilleOuverte] = useState(false);
+  const [nomNouvelleFamille, setNomNouvelleFamille] = useState('');
+  const [nouvelleSousFamilleOuverte, setNouvelleSousFamilleOuverte] = useState(false);
+  const [nomNouvelleSousFamille, setNomNouvelleSousFamille] = useState('');
+  const [codeNouvelleSousFamille, setCodeNouvelleSousFamille] = useState('');
+  const [creationEnCours, setCreationEnCours] = useState(false);
+
   const familleSelectionnee = familles.find((f) => f.id === Number(familleId));
   const sousFamillesDisponibles = familleSelectionnee?.sousFamilles || [];
+
+  async function creerNouvelleFamille() {
+    if (!nomNouvelleFamille.trim()) return;
+    setCreationEnCours(true);
+    setErreur('');
+    try {
+      const nouvelle = await appelApi('POST', '/familles', { nom: nomNouvelleFamille.trim() });
+      const familleAvecSousFamilles = { ...nouvelle, sousFamilles: [] };
+      const misesAJour = [...familles, familleAvecSousFamilles];
+      onFamillesMisesAJour(misesAJour);
+      setFamilleId(String(nouvelle.id));
+      setSousFamilleId('');
+      setNomNouvelleFamille('');
+      setNouvelleFamilleOuverte(false);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setCreationEnCours(false);
+    }
+  }
+
+  async function creerNouvelleSousFamille() {
+    if (!nomNouvelleSousFamille.trim() || !codeNouvelleSousFamille.trim() || !familleId) return;
+    setCreationEnCours(true);
+    setErreur('');
+    try {
+      const nouvelle = await appelApi('POST', `/familles/${familleId}/sous-familles`, {
+        nom: nomNouvelleSousFamille.trim(),
+        codePrefixe: codeNouvelleSousFamille.trim(),
+      });
+      const misesAJour = familles.map((f) =>
+        f.id === Number(familleId) ? { ...f, sousFamilles: [...f.sousFamilles, nouvelle] } : f
+      );
+      onFamillesMisesAJour(misesAJour);
+      setSousFamilleId(String(nouvelle.id));
+      setNomNouvelleSousFamille('');
+      setCodeNouvelleSousFamille('');
+      setNouvelleSousFamilleOuverte(false);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setCreationEnCours(false);
+    }
+  }
 
   async function gererSoumission(e) {
     e.preventDefault();
     setErreur('');
 
-    if (!designation || !reference || !prixVente) {
-      setErreur('Désignation, référence et prix de vente sont requis.');
+    if (!designation || !familleId || !sousFamilleId || !prixVente) {
+      setErreur('Désignation, famille, sous-famille et prix de vente sont requis.');
       return;
     }
 
@@ -231,10 +287,9 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onCree, onMod
     try {
       if (estEdition) {
         const article = await appelApi('PUT', `/articles/${articleEnEdition.id}`, {
-          reference,
           designation,
-          familleId: familleId || null,
-          sousFamilleId: sousFamilleId || null,
+          familleId,
+          sousFamilleId,
           prixAchat: prixAchat !== '' ? Number(prixAchat) : 0,
           prixVente: Number(prixVente),
           seuilAlerte: Number(seuilAlerte),
@@ -242,12 +297,11 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onCree, onMod
         onModifie(article);
       } else {
         const article = await appelApi('POST', '/articles', {
-          reference,
           codeBarre: codeBarre.trim() || undefined,
           codeInterne: codeInterne.trim() || undefined,
           designation,
-          familleId: familleId || null,
-          sousFamilleId: sousFamilleId || null,
+          familleId,
+          sousFamilleId,
           prixAchat: prixAchat ? Number(prixAchat) : 0,
           prixVente: Number(prixVente),
           seuilAlerte: Number(seuilAlerte),
@@ -273,10 +327,11 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onCree, onMod
           <input style={styles.champInput} value={designation} onChange={(e) => setDesignation(e.target.value)} />
         </label>
 
-        <label style={styles.champLabel}>
-          Référence *
-          <input style={styles.champInput} value={reference} onChange={(e) => setReference(e.target.value)} />
-        </label>
+        {estEdition && (
+          <p style={{ fontSize: 12, color: 'var(--brown-soft)' }}>
+            Référence : {articleEnEdition.reference} (non modifiable)
+          </p>
+        )}
 
         {!estEdition && (
           <>
@@ -309,32 +364,76 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onCree, onMod
         )}
 
         <label style={styles.champLabel}>
-          Famille
-          <select
-            style={styles.champInput}
-            value={familleId}
-            onChange={(e) => {
-              setFamilleId(e.target.value);
-              setSousFamilleId('');
-            }}
-          >
-            <option value="">—</option>
-            {familles.map((f) => (
-              <option key={f.id} value={f.id}>{f.nom}</option>
-            ))}
-          </select>
-        </label>
-
-        {sousFamillesDisponibles.length > 0 && (
-          <label style={styles.champLabel}>
-            Sous-famille
-            <select style={styles.champInput} value={sousFamilleId} onChange={(e) => setSousFamilleId(e.target.value)}>
+          Famille *
+          <div style={styles.ligneAvecBouton}>
+            <select
+              style={{ ...styles.champInput, flex: 1 }}
+              value={familleId}
+              onChange={(e) => {
+                setFamilleId(e.target.value);
+                setSousFamilleId('');
+              }}
+            >
               <option value="">—</option>
-              {sousFamillesDisponibles.map((sf) => (
-                <option key={sf.id} value={sf.id}>{sf.nom}</option>
+              {familles.map((f) => (
+                <option key={f.id} value={f.id}>{f.nom}</option>
               ))}
             </select>
+            <button type="button" onClick={() => setNouvelleFamilleOuverte((v) => !v)} style={styles.boutonPlus}>+</button>
+          </div>
+        </label>
+
+        {nouvelleFamilleOuverte && (
+          <div style={styles.blocCreationRapide}>
+            <input
+              style={styles.champInput}
+              placeholder="Nom de la nouvelle famille…"
+              value={nomNouvelleFamille}
+              onChange={(e) => setNomNouvelleFamille(e.target.value)}
+            />
+            <button type="button" onClick={creerNouvelleFamille} disabled={creationEnCours} style={styles.boutonValiderPetit}>
+              Créer
+            </button>
+          </div>
+        )}
+
+        {familleId && (
+          <label style={styles.champLabel}>
+            Sous-famille *
+            <div style={styles.ligneAvecBouton}>
+              <select
+                style={{ ...styles.champInput, flex: 1 }}
+                value={sousFamilleId}
+                onChange={(e) => setSousFamilleId(e.target.value)}
+              >
+                <option value="">—</option>
+                {sousFamillesDisponibles.map((sf) => (
+                  <option key={sf.id} value={sf.id}>{sf.nom} ({sf.codePrefixe})</option>
+                ))}
+              </select>
+              <button type="button" onClick={() => setNouvelleSousFamilleOuverte((v) => !v)} style={styles.boutonPlus}>+</button>
+            </div>
           </label>
+        )}
+
+        {nouvelleSousFamilleOuverte && (
+          <div style={styles.blocCreationRapide}>
+            <input
+              style={styles.champInput}
+              placeholder="Nom de la sous-famille…"
+              value={nomNouvelleSousFamille}
+              onChange={(e) => setNomNouvelleSousFamille(e.target.value)}
+            />
+            <input
+              style={{ ...styles.champInput, maxWidth: 100 }}
+              placeholder="Code (ex: ANDT)"
+              value={codeNouvelleSousFamille}
+              onChange={(e) => setCodeNouvelleSousFamille(e.target.value.toUpperCase())}
+            />
+            <button type="button" onClick={creerNouvelleSousFamille} disabled={creationEnCours} style={styles.boutonValiderPetit}>
+              Créer
+            </button>
+          </div>
         )}
 
         <label style={styles.champLabel}>
@@ -390,6 +489,10 @@ const styles = {
   titreFormulaire: { fontFamily: 'var(--font-display)', margin: 0, marginBottom: 8 },
   champLabel: { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 600 },
   champInput: { padding: '10px 12px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14 },
+  ligneAvecBouton: { display: 'flex', gap: 6, alignItems: 'stretch' },
+  boutonPlus: { padding: '0 14px', borderRadius: 8, border: 'none', background: 'var(--gold-mid)', color: 'var(--white)', cursor: 'pointer', fontWeight: 700, fontSize: 16 },
+  blocCreationRapide: { display: 'flex', gap: 6, padding: 10, background: 'var(--cream)', borderRadius: 8 },
+  boutonValiderPetit: { padding: '8px 12px', borderRadius: 6, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' },
   boutonsFormulaire: { display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 },
   boutonAnnuler: { padding: '10px 16px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer' },
   boutonValider: { padding: '10px 16px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
