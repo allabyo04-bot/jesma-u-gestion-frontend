@@ -85,6 +85,11 @@ function OngletReception({ lieux, articles }) {
   const [receptions, setReceptions] = useState([]);
   const [chargementListe, setChargementListe] = useState(true);
 
+  // --- Scan / recherche rapide d'article (code-barre, référence ou nom) ---
+  const [rechercheArticle, setRechercheArticle] = useState('');
+  const [resultatsRecherche, setResultatsRecherche] = useState([]);
+  const [erreurRecherche, setErreurRecherche] = useState('');
+
   useEffect(() => {
     chargerReceptions();
   }, []);
@@ -102,6 +107,53 @@ function OngletReception({ lieux, articles }) {
     const article = articles.find((a) => a.id === Number(id));
     // Pré-remplit avec le dernier prix d'achat connu, modifiable si le fournisseur a changé son prix.
     setPrixAchatAAjouter(article ? String(article.prixAchat ?? '') : '');
+  }
+
+  // Recherche locale dans la liste d'articles déjà chargée : correspondance exacte
+  // (code-barre scanné, code interne ou référence) -> sélection automatique.
+  // Sinon, correspondance partielle sur désignation/référence -> liste de résultats à cliquer.
+  function rechercherArticleScan(e) {
+    e.preventDefault();
+    const q = rechercheArticle.trim();
+    if (!q) return;
+    setErreurRecherche('');
+    setResultatsRecherche([]);
+
+    const qLower = q.toLowerCase();
+    const exact = articles.find(
+      (a) =>
+        a.codeBarre === q ||
+        a.codeInterne === q ||
+        (a.reference && a.reference.toLowerCase() === qLower)
+    );
+    if (exact) {
+      gererChoixArticle(String(exact.id));
+      setRechercheArticle('');
+      return;
+    }
+
+    const partiels = articles
+      .filter(
+        (a) =>
+          a.designation.toLowerCase().includes(qLower) ||
+          (a.reference && a.reference.toLowerCase().includes(qLower))
+      )
+      .slice(0, 8);
+
+    if (partiels.length === 1) {
+      gererChoixArticle(String(partiels[0].id));
+      setRechercheArticle('');
+    } else if (partiels.length > 1) {
+      setResultatsRecherche(partiels);
+    } else {
+      setErreurRecherche(`Aucun article trouvé pour "${q}".`);
+    }
+  }
+
+  function choisirResultatScan(article) {
+    gererChoixArticle(String(article.id));
+    setRechercheArticle('');
+    setResultatsRecherche([]);
   }
 
   function ajouterLigne() {
@@ -211,9 +263,40 @@ function OngletReception({ lieux, articles }) {
           />
         </label>
 
+        <form onSubmit={rechercherArticleScan} style={styles.ligneChamps}>
+          <label style={{ ...styles.champLabel, flex: 1 }}>
+            Scanner ou rechercher un article
+            <input
+              autoFocus
+              style={styles.champInput}
+              placeholder="Scanner le code-barre ou taper nom/référence…"
+              value={rechercheArticle}
+              onChange={(e) => setRechercheArticle(e.target.value)}
+            />
+          </label>
+          <button type="submit" style={styles.boutonAjouter}>Chercher</button>
+        </form>
+
+        {erreurRecherche && <p style={{ color: 'var(--error)', fontSize: 13, marginTop: -8 }}>{erreurRecherche}</p>}
+
+        {resultatsRecherche.length > 0 && (
+          <div style={styles.listeLignes}>
+            {resultatsRecherche.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => choisirResultatScan(a)}
+                style={styles.itemResultatScan}
+              >
+                {a.designation} ({a.reference})
+              </button>
+            ))}
+          </div>
+        )}
+
         <div style={styles.ligneChamps}>
           <label style={{ ...styles.champLabel, flex: 1 }}>
-            Article
+            Article sélectionné
             <select style={styles.champInput} value={articleAAjouter} onChange={(e) => gererChoixArticle(e.target.value)}>
               <option value="">—</option>
               {articles.map((a) => (
@@ -906,6 +989,7 @@ const styles = {
   boutonAjouter: { padding: '8px 14px', borderRadius: 8, border: 'none', background: 'var(--gold-mid)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, height: 38 },
   listeLignes: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 },
   ligneItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6, background: 'var(--cream)', fontSize: 13 },
+  itemResultatScan: { display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--cream-deep)', background: 'transparent', cursor: 'pointer', fontSize: 13 },
   boutonRetirer: { border: 'none', background: 'transparent', color: 'var(--error)', cursor: 'pointer', fontSize: 14 },
   boutonValider: { padding: '10px 16px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, width: '100%' },
   texteMuet: { fontSize: 13, color: 'var(--brown-soft)' },
