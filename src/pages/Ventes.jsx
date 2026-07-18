@@ -515,6 +515,18 @@ export default function Ventes() {
     retirerAvoir();
   }
 
+  // Le client se désiste avant paiement : on vide le panier en cours sans rien
+  // enregistrer (ni en base, ni en liste d'attente). Simple confirmation pour
+  // éviter un clic accidentel qui ferait perdre une vente en cours de saisie.
+  function annulerVenteEnCours() {
+    if (panier.length === 0) return;
+    const confirme = window.confirm('Annuler cette vente ? Le panier sera vidé et rien ne sera enregistré.');
+    if (!confirme) return;
+    reinitialiserVente();
+    setErreurVente('');
+    setConfirmation(null);
+  }
+
   const totalBrut = panier.reduce((somme, l) => somme + l.prixUnitaire * l.quantite, 0);
   const remise = Math.min(Number(remiseMontant) || 0, totalBrut);
   const totalNet = totalBrut - remise;
@@ -529,24 +541,13 @@ export default function Ventes() {
     } else if (panier.length === 0) {
       setMontantAAjouter('');
     }
-  }, [resteAPayer, panier.length]);
-
-  useEffect(() => {
-    diffuserEtatPanier({ panier, remise });
-  }, [panier, remise]);
-
-  useEffect(() => {
-    return ecouterCanal((message) => {
-      if (message.type === 'DEMANDE_ETAT') {
-        diffuserEtatPanier({ panier, remise });
-      }
-    });
-  }, [panier, remise]);
+  }, [panier.length, resteAPayer]);
 
   function ajouterPaiement() {
     const montant = Number(montantAAjouter);
     if (!montant || montant <= 0) return;
     setPaiements((prec) => [...prec, { mode: modeAAjouter, montant }]);
+    setMontantAAjouter('');
   }
 
   function retirerPaiement(index) {
@@ -1205,11 +1206,8 @@ export default function Ventes() {
                         <div style={{ fontSize: 12, color: 'var(--brown-soft)' }}>
                           {ligne.prixUnitaire.toLocaleString('fr-FR')} F × {ligne.quantite}
                         </div>
-                        {stockRestant !== null && (
-                          <div style={{
-                            ...styles.badgeStock,
-                            color: stockRestant <= 0 ? 'var(--error)' : 'var(--brown-soft)',
-                          }}>
+                        {stockRestant != null && (
+                          <div style={{ ...styles.badgeStock, color: stockRestant < 0 ? 'var(--error)' : 'var(--brown-soft)' }}>
                             Stock restant : {stockRestant}
                           </div>
                         )}
@@ -1224,50 +1222,43 @@ export default function Ventes() {
                   );
                 })}
 
-                {panier.length > 0 && (
-                  <>
-                    <div style={styles.blocRemise}>
-                      <label style={styles.champLabel}>
-                        Remise (F)
-                        <input
-                          type="number"
-                          min="0"
-                          style={styles.champInput}
-                          value={remiseMontant}
-                          onChange={(e) => setRemiseMontant(e.target.value)}
-                          placeholder="0"
-                        />
-                      </label>
-                      {Number(remiseMontant) > 0 && (
-                        <label style={styles.champLabel}>
-                          Motif de la remise
-                          <input
-                            style={styles.champInput}
-                            value={motifRemise}
-                            onChange={(e) => setMotifRemise(e.target.value)}
-                            placeholder="Optionnel…"
-                          />
-                        </label>
-                      )}
-                    </div>
+                <div style={styles.blocRemise}>
+                  <label style={styles.champLabel}>
+                    Remise (F)
+                    <input
+                      type="number"
+                      min="0"
+                      style={styles.champInput}
+                      value={remiseMontant}
+                      onChange={(e) => setRemiseMontant(e.target.value)}
+                    />
+                  </label>
+                  {Number(remiseMontant) > 0 && (
+                    <label style={styles.champLabel}>
+                      Motif de la remise
+                      <input
+                        style={styles.champInput}
+                        value={motifRemise}
+                        onChange={(e) => setMotifRemise(e.target.value)}
+                        placeholder="Optionnel…"
+                      />
+                    </label>
+                  )}
+                </div>
 
-                    <div style={styles.recapTotaux}>
-                      <div style={styles.ligneRecap}>
-                        <span>Sous-total</span>
-                        <span>{totalBrut.toLocaleString('fr-FR')} F</span>
-                      </div>
-                      {remise > 0 && (
-                        <div style={styles.ligneRecap}>
-                          <span>Remise</span>
-                          <span style={{ color: 'var(--error)' }}>−{remise.toLocaleString('fr-FR')} F</span>
-                        </div>
-                      )}
-                      <div style={styles.totalPanier}>
-                        Total : {totalNet.toLocaleString('fr-FR')} F
-                      </div>
+                <div style={styles.recapTotaux}>
+                  <div style={styles.ligneRecap}>
+                    <span>Sous-total</span>
+                    <span>{totalBrut.toLocaleString('fr-FR')} F</span>
+                  </div>
+                  {remise > 0 && (
+                    <div style={styles.ligneRecap}>
+                      <span>Remise</span>
+                      <span>−{remise.toLocaleString('fr-FR')} F</span>
                     </div>
-                  </>
-                )}
+                  )}
+                  <div style={styles.totalPanier}>Total : {totalNet.toLocaleString('fr-FR')} F</div>
+                </div>
               </div>
 
               <div style={styles.colonnePaiement}>
@@ -1345,6 +1336,13 @@ export default function Ventes() {
                 )}
 
                 <div style={styles.boutonsAction}>
+                  <button
+                    onClick={annulerVenteEnCours}
+                    disabled={panier.length === 0}
+                    style={styles.boutonAnnulerVente}
+                  >
+                    Annuler (client désiste)
+                  </button>
                   <button onClick={mettreEnAttente} style={styles.boutonAttente}>
                     Mettre en attente
                   </button>
@@ -1410,6 +1408,7 @@ const styles = {
   recapPaiement: { marginTop: 4, paddingTop: 10, borderTop: '2px solid var(--gold-mid)' },
   boutonsAction: { marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12 },
   boutonAttente: { padding: '10px 14px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer' },
+  boutonAnnulerVente: { padding: '10px 14px', borderRadius: 8, border: '1px solid var(--error)', background: 'transparent', color: 'var(--error)', cursor: 'pointer', fontWeight: 600 },
   boutonValider: { padding: '10px 14px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
   listeAttente: { display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 600 },
   carteAttente: { background: 'var(--white)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 6 },
