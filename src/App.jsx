@@ -12,6 +12,7 @@ import Etats from './pages/Etats.jsx';
 import Utilisateurs from './pages/Utilisateurs.jsx';
 import Roles from './pages/Roles.jsx';
 import Depenses from './pages/Depenses.jsx';
+import Parametres from './pages/Parametres.jsx';
 
 function estConnecte() {
   return !!localStorage.getItem('jesma_token');
@@ -41,11 +42,19 @@ export default function App() {
           </RouteProtegee>
         }
       />
-     <Route
+      <Route
         path="/roles"
         element={
           <RouteProtegee>
             <Roles />
+          </RouteProtegee>
+        }
+      />
+      <Route
+        path="/parametres"
+        element={
+          <RouteProtegee>
+            <Parametres />
           </RouteProtegee>
         }
       />
@@ -94,6 +103,14 @@ export default function App() {
         element={
           <RouteProtegee>
             <Depenses />
+          </RouteProtegee>
+        }
+      />
+      <Route
+        path="/listes-cadeaux"
+        element={
+          <RouteProtegee>
+            <ListesCadeaux />
           </RouteProtegee>
         }
       />
