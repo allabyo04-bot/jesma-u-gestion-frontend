@@ -64,6 +64,13 @@ function imprimerFermetureCaisse(fermeture, lieuNom) {
   fenetre.document.close();
 }
 
+const LIBELLES_TYPE_RECOMPENSE = {
+  A_DEFINIR: 'À déterminer',
+  REMISE: 'Remise',
+  ARTICLE: 'Article offert',
+  AUTRE: 'Autre',
+};
+
 export default function Etats() {
   const navigate = useNavigate();
   const utilisateur = getUtilisateur();
@@ -76,6 +83,7 @@ export default function Etats() {
     { id: 'vendeur', label: 'Meilleur vendeur' },
     ...(estAdmin ? [{ id: 'boutique', label: 'Récap boutiques' }] : []),
     { id: 'fermeture', label: 'Fermeture de caisse' },
+    { id: 'fidelite', label: 'Récompenses fidélité' },
   ];
 
   const [ongletActif, setOngletActif] = useState('date');
@@ -87,7 +95,7 @@ export default function Etats() {
   const [raccourciActif, setRaccourciActif] = useState('aujourdhui');
 
   const [donnees, setDonnees] = useState(null);
-  const [ongletDonnees, setOngletDonnees] = useState(null); // à quel onglet correspondent les données actuelles
+  const [ongletDonnees, setOngletDonnees] = useState(null);
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState('');
   const compteurRequete = useRef(0);
@@ -96,6 +104,18 @@ export default function Etats() {
   const [fermeture, setFermeture] = useState(null);
   const [fermetureChargement, setFermetureChargement] = useState(false);
   const [fermetureErreur, setFermetureErreur] = useState('');
+
+  const [recompenses, setRecompenses] = useState([]);
+  const [recompensesChargement, setRecompensesChargement] = useState(false);
+  const [recompensesErreur, setRecompensesErreur] = useState('');
+  const [statutFiltre, setStatutFiltre] = useState('EN_ATTENTE');
+  const [articles, setArticles] = useState([]);
+  const [editionId, setEditionId] = useState(null);
+  const [typeEdition, setTypeEdition] = useState('REMISE');
+  const [valeurRemiseEdition, setValeurRemiseEdition] = useState('');
+  const [articleIdEdition, setArticleIdEdition] = useState('');
+  const [descriptionEdition, setDescriptionEdition] = useState('');
+  const [actionEnCours, setActionEnCours] = useState(false);
 
   useEffect(() => {
     appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
@@ -117,10 +137,7 @@ export default function Etats() {
   }
 
   async function chargerOnglet() {
-    if (ongletActif === 'fermeture') return;
-    // Compteur de requêtes : si une réponse plus ancienne arrive après une plus récente
-    // (ex: clics rapides entre onglets), on l'ignore pour ne jamais afficher des données
-    // qui ne correspondent pas à l'onglet actuellement affiché.
+    if (ongletActif === 'fermeture' || ongletActif === 'fidelite') return;
     const idRequete = ++compteurRequete.current;
     const ongletDemande = ongletActif;
     setChargement(true);
@@ -175,7 +192,66 @@ export default function Etats() {
     if (ongletActif === 'fermeture') chargerFermeture();
   }, [ongletActif, dateFermeture, lieuId]);
 
-  // N'affiche les données que si elles correspondent bien à l'onglet actuellement sélectionné.
+  function chargerRecompenses() {
+    setRecompensesChargement(true);
+    setRecompensesErreur('');
+    const params = statutFiltre ? `?statut=${statutFiltre}` : '';
+    appelApi('GET', `/fidelite${params}`)
+      .then(setRecompenses)
+      .catch((err) => setRecompensesErreur(err.message))
+      .finally(() => setRecompensesChargement(false));
+  }
+
+  useEffect(() => {
+    if (ongletActif === 'fidelite') {
+      chargerRecompenses();
+      if (articles.length === 0) {
+        appelApi('GET', '/articles').then(setArticles).catch(() => {});
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ongletActif, statutFiltre]);
+
+  function ouvrirDefinition(recompense) {
+    setEditionId(recompense.id);
+    setTypeEdition(recompense.type === 'A_DEFINIR' ? 'REMISE' : recompense.type);
+    setValeurRemiseEdition(recompense.valeurRemise ? String(recompense.valeurRemise) : '');
+    setArticleIdEdition(recompense.articleOffertId ? String(recompense.articleOffertId) : '');
+    setDescriptionEdition(recompense.description || '');
+  }
+
+  async function enregistrerDefinition(recompense) {
+    setRecompensesErreur('');
+    setActionEnCours(true);
+    try {
+      await appelApi('PUT', `/fidelite/${recompense.id}`, {
+        type: typeEdition,
+        valeurRemise: typeEdition === 'REMISE' ? Number(valeurRemiseEdition) : undefined,
+        articleOffertId: typeEdition === 'ARTICLE' ? Number(articleIdEdition) : undefined,
+        description: descriptionEdition || undefined,
+      });
+      setEditionId(null);
+      chargerRecompenses();
+    } catch (err) {
+      setRecompensesErreur(err.message);
+    } finally {
+      setActionEnCours(false);
+    }
+  }
+
+  async function marquerRemis(recompense) {
+    setRecompensesErreur('');
+    setActionEnCours(true);
+    try {
+      await appelApi('POST', `/fidelite/${recompense.id}/marquer-utilisee`);
+      chargerRecompenses();
+    } catch (err) {
+      setRecompensesErreur(err.message);
+    } finally {
+      setActionEnCours(false);
+    }
+  }
+
   const donneesAJour = donnees && ongletDonnees === ongletActif ? donnees : null;
 
   return (
@@ -197,76 +273,97 @@ export default function Etats() {
         ))}
       </div>
 
-      <div style={styles.blocFiltres}>
-        <label style={styles.champLabel}>
-          Boutique
-          <select style={styles.champInput} value={lieuId} onChange={(e) => setLieuId(e.target.value)}>
-            <option value="">Toutes les boutiques</option>
-            {lieux.map((l) => (
-              <option key={l.id} value={l.id}>{l.nom}</option>
-            ))}
-          </select>
-        </label>
-
-        {ongletActif !== 'fermeture' ? (
-          <>
-            <div style={styles.raccourcis}>
-              {[
-                { id: 'aujourdhui', label: "Aujourd'hui" },
-                { id: 'semaine', label: 'Cette semaine' },
-                { id: 'mois', label: 'Ce mois' },
-                { id: 'personnalise', label: 'Personnalisé' },
-              ].map((r) => (
-                <button
-                  key={r.id}
-                  onClick={() => appliquerRaccourci(r.id)}
-                  style={r.id === raccourciActif ? styles.filtreActif : styles.filtreInactif}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-            <label style={styles.champLabel}>
-              Du
-              <input
-                type="date"
-                style={styles.champInput}
-                value={dateDebut}
-                onChange={(e) => { setDateDebut(e.target.value); setRaccourciActif('personnalise'); }}
-              />
-            </label>
-            <label style={styles.champLabel}>
-              Au
-              <input
-                type="date"
-                style={styles.champInput}
-                value={dateFin}
-                onChange={(e) => { setDateFin(e.target.value); setRaccourciActif('personnalise'); }}
-              />
-            </label>
-          </>
-        ) : (
-          <>
-            <label style={styles.champLabel}>
-              Date
-              <input
-                type="date"
-                style={styles.champInput}
-                value={dateFermeture}
-                onChange={(e) => setDateFermeture(e.target.value)}
-              />
-            </label>
-            {fermeture && (
+      {ongletActif === 'fidelite' ? (
+        <div style={styles.blocFiltres}>
+          <div style={styles.raccourcis}>
+            {[
+              { id: 'EN_ATTENTE', label: 'En attente' },
+              { id: 'DEFINIE', label: 'Cadeau défini' },
+              { id: 'UTILISEE', label: 'Remis' },
+              { id: '', label: 'Tous' },
+            ].map((s) => (
               <button
-                onClick={() => imprimerFermetureCaisse(fermeture, lieux.find((l) => String(l.id) === String(lieuId))?.nom)}
-                style={styles.boutonImprimer}
+                key={s.id || 'tous'}
+                onClick={() => setStatutFiltre(s.id)}
+                style={s.id === statutFiltre ? styles.filtreActif : styles.filtreInactif}
               >
-                🖨️ Imprimer
+                {s.label}
               </button>
-            )}
-          </>
-        )}
-      </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div style={styles.blocFiltres}>
+          <label style={styles.champLabel}>
+            Boutique
+            <select style={styles.champInput} value={lieuId} onChange={(e) => setLieuId(e.target.value)}>
+              <option value="">Toutes les boutiques</option>
+              {lieux.map((l) => (
+                <option key={l.id} value={l.id}>{l.nom}</option>
+              ))}
+            </select>
+          </label>
+
+          {ongletActif !== 'fermeture' ? (
+            <>
+              <div style={styles.raccourcis}>
+                {[
+                  { id: 'aujourdhui', label: "Aujourd'hui" },
+                  { id: 'semaine', label: 'Cette semaine' },
+                  { id: 'mois', label: 'Ce mois' },
+                  { id: 'personnalise', label: 'Personnalisé' },
+                ].map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => appliquerRaccourci(r.id)}
+                    style={r.id === raccourciActif ? styles.filtreActif : styles.filtreInactif}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              <label style={styles.champLabel}>
+                Du
+                <input
+                  type="date"
+                  style={styles.champInput}
+                  value={dateDebut}
+                  onChange={(e) => { setDateDebut(e.target.value); setRaccourciActif('personnalise'); }}
+                />
+              </label>
+              <label style={styles.champLabel}>
+                Au
+                <input
+                  type="date"
+                  style={styles.champInput}
+                  value={dateFin}
+                  onChange={(e) => { setDateFin(e.target.value); setRaccourciActif('personnalise'); }}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label style={styles.champLabel}>
+                Date
+                <input
+                  type="date"
+                  style={styles.champInput}
+                  value={dateFermeture}
+                  onChange={(e) => setDateFermeture(e.target.value)}
+                />
+              </label>
+              {fermeture && (
+                <button
+                  onClick={() => imprimerFermetureCaisse(fermeture, lieux.find((l) => String(l.id) === String(lieuId))?.nom)}
+                  style={styles.boutonImprimer}
+                >
+                  🖨️ Imprimer
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {ongletActif === 'fermeture' ? (
         <>
@@ -314,6 +411,93 @@ export default function Etats() {
               </div>
             </div>
           )}
+        </>
+      ) : ongletActif === 'fidelite' ? (
+        <>
+          {recompensesErreur && <div style={styles.bandeauErreur}>{recompensesErreur}</div>}
+          {recompensesChargement && <p style={styles.texteMuet}>Chargement…</p>}
+          {!recompensesChargement && recompenses.length === 0 && (
+            <p style={styles.texteMuet}>Aucun client dans cette catégorie pour l'instant.</p>
+          )}
+
+          <div style={styles.tableauWrapper}>
+            {recompenses.map((r) => (
+              <div key={r.id} style={styles.carteAttente}>
+                <div style={styles.enTeteCarteAttente}>
+                  <span style={{ fontWeight: 700 }}>{r.client.nomComplet}</span>
+                  <span style={styles.texteMuet}>Atteint le {new Date(r.dateAtteinte).toLocaleDateString('fr-FR')}</span>
+                </div>
+                <div style={styles.texteMuet}>
+                  {r.client.telephone || 'Téléphone non renseigné'} — 10 achats consécutifs, {Number(r.montantCumule).toLocaleString('fr-FR')} F cumulés
+                </div>
+
+                {r.statut === 'UTILISEE' ? (
+                  <div style={styles.texteMuet}>
+                    ✅ Cadeau remis le {new Date(r.dateUtilisation).toLocaleDateString('fr-FR')} —{' '}
+                    {r.type === 'REMISE' && `Remise de ${Number(r.valeurRemise).toLocaleString('fr-FR')} F`}
+                    {r.type === 'ARTICLE' && `Article offert : ${r.articleOffert?.designation || '—'}`}
+                    {r.type === 'AUTRE' && (r.description || 'Autre cadeau')}
+                  </div>
+                ) : editionId === r.id ? (
+                  <div style={styles.formDefinitionCadeau}>
+                    <select style={styles.champInput} value={typeEdition} onChange={(e) => setTypeEdition(e.target.value)}>
+                      <option value="REMISE">Remise</option>
+                      <option value="ARTICLE">Article offert</option>
+                      <option value="AUTRE">Autre</option>
+                    </select>
+                    {typeEdition === 'REMISE' && (
+                      <input
+                        type="number"
+                        min="0"
+                        style={styles.champInput}
+                        placeholder="Montant de la remise (F)"
+                        value={valeurRemiseEdition}
+                        onChange={(e) => setValeurRemiseEdition(e.target.value)}
+                      />
+                    )}
+                    {typeEdition === 'ARTICLE' && (
+                      <select style={styles.champInput} value={articleIdEdition} onChange={(e) => setArticleIdEdition(e.target.value)}>
+                        <option value="">— Choisir l'article —</option>
+                        {articles.map((a) => (
+                          <option key={a.id} value={a.id}>{a.designation}</option>
+                        ))}
+                      </select>
+                    )}
+                    <input
+                      style={styles.champInput}
+                      placeholder="Note (optionnel)…"
+                      value={descriptionEdition}
+                      onChange={(e) => setDescriptionEdition(e.target.value)}
+                    />
+                    <div style={styles.boutonsCarteAttente}>
+                      <button onClick={() => enregistrerDefinition(r)} disabled={actionEnCours} style={styles.boutonReprendre}>
+                        Enregistrer
+                      </button>
+                      <button onClick={() => setEditionId(null)} style={styles.boutonRetirer}>Annuler</button>
+                    </div>
+                  </div>
+                ) : r.statut === 'DEFINIE' ? (
+                  <>
+                    <div style={styles.texteMuet}>
+                      🎁 Cadeau prévu : {r.type === 'REMISE' && `Remise de ${Number(r.valeurRemise).toLocaleString('fr-FR')} F`}
+                      {r.type === 'ARTICLE' && `Article offert : ${r.articleOffert?.designation || '—'}`}
+                      {r.type === 'AUTRE' && (r.description || 'Autre cadeau')}
+                    </div>
+                    <div style={styles.boutonsCarteAttente}>
+                      <button onClick={() => ouvrirDefinition(r)} style={styles.boutonReprendre}>Modifier</button>
+                      <button onClick={() => marquerRemis(r)} disabled={actionEnCours} style={styles.boutonReprendre}>
+                        Marquer comme remis
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div style={styles.boutonsCarteAttente}>
+                    <button onClick={() => ouvrirDefinition(r)} style={styles.boutonReprendre}>Définir le cadeau</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </>
       ) : (
         <>
@@ -438,4 +622,8 @@ const styles = {
   carte: { background: 'var(--white)', borderRadius: 12, padding: 16 },
   carteLabel: { fontSize: 13, color: 'var(--brown-soft)', marginBottom: 4 },
   carteValeur: { fontSize: 22, fontWeight: 700 },
+  boutonsCarteAttente: { display: 'flex', gap: 8, marginTop: 6 },
+  boutonReprendre: { padding: '6px 12px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 13 },
+  boutonRetirer: { border: 'none', background: 'transparent', color: 'var(--error)', cursor: 'pointer', fontSize: 12, fontWeight: 600 },
+  formDefinitionCadeau: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 },
 };
