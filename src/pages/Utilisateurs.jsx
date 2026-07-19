@@ -2,15 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { appelApi } from '../lib/api';
 
-const ROLES = [
-  { id: 'ADMIN', label: 'Administrateur' },
-  { id: 'CAISSIER', label: 'Caissier' },
-];
-
 export default function Utilisateurs() {
   const navigate = useNavigate();
   const [utilisateurs, setUtilisateurs] = useState([]);
   const [lieux, setLieux] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [erreur, setErreur] = useState('');
   const [chargement, setChargement] = useState(true);
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
@@ -22,10 +18,15 @@ export default function Utilisateurs() {
 
   function chargerDonnees() {
     setChargement(true);
-    Promise.all([appelApi('GET', '/utilisateurs'), appelApi('GET', '/stock/lieux')])
-      .then(([listeUtilisateurs, listeLieux]) => {
+    Promise.all([
+      appelApi('GET', '/utilisateurs'),
+      appelApi('GET', '/stock/lieux'),
+      appelApi('GET', '/roles'),
+    ])
+      .then(([listeUtilisateurs, listeLieux, listeRoles]) => {
         setUtilisateurs(listeUtilisateurs);
         setLieux(listeLieux);
+        setRoles(listeRoles);
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false));
@@ -84,6 +85,7 @@ export default function Utilisateurs() {
       {formulaireOuvert && (
         <FormulaireUtilisateur
           lieux={lieux}
+          roles={roles}
           utilisateurEnEdition={utilisateurEnEdition}
           onFermer={() => setFormulaireOuvert(false)}
           onEnregistre={() => {
@@ -106,6 +108,11 @@ function initiales(nomComplet) {
 }
 
 function CarteUtilisateur({ utilisateur, onBasculerActif, onModifier }) {
+  const estAdmin = utilisateur.roleDynamique ? utilisateur.roleDynamique.estAdmin : utilisateur.role === 'ADMIN';
+  const nomRoleAffiche = utilisateur.roleDynamique
+    ? utilisateur.roleDynamique.nom
+    : (utilisateur.role === 'ADMIN' ? 'Administrateur' : 'Caissier');
+
   return (
     <div style={styles.carte}>
       <div style={styles.enTeteCarte}>
@@ -118,8 +125,8 @@ function CarteUtilisateur({ utilisateur, onBasculerActif, onModifier }) {
       </div>
 
       <div style={styles.badges}>
-        <span style={{ ...styles.badge, background: utilisateur.role === 'ADMIN' ? 'var(--gold-deep)' : '#3E6B4F' }}>
-          {utilisateur.role === 'ADMIN' ? 'Administrateur' : 'Caissier'}
+        <span style={{ ...styles.badge, background: estAdmin ? 'var(--gold-deep)' : '#3E6B4F' }}>
+          {nomRoleAffiche}
         </span>
         {utilisateur.lieu && <span style={styles.badgeLieu}>🏠 {utilisateur.lieu.nom}</span>}
       </div>
@@ -134,13 +141,13 @@ function CarteUtilisateur({ utilisateur, onBasculerActif, onModifier }) {
   );
 }
 
-function FormulaireUtilisateur({ lieux, utilisateurEnEdition, onFermer, onEnregistre }) {
+function FormulaireUtilisateur({ lieux, roles, utilisateurEnEdition, onFermer, onEnregistre }) {
   const estEdition = !!utilisateurEnEdition;
 
   const [nomUtilisateur, setNomUtilisateur] = useState(utilisateurEnEdition?.nomUtilisateur || '');
   const [pin, setPin] = useState('');
   const [nomComplet, setNomComplet] = useState(utilisateurEnEdition?.nomComplet || '');
-  const [role, setRole] = useState(utilisateurEnEdition?.role || 'CAISSIER');
+  const [roleId, setRoleId] = useState(utilisateurEnEdition?.roleId ? String(utilisateurEnEdition.roleId) : '');
   const [lieuId, setLieuId] = useState(utilisateurEnEdition?.lieuId ? String(utilisateurEnEdition.lieuId) : '');
   const [erreur, setErreur] = useState('');
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
@@ -153,13 +160,17 @@ function FormulaireUtilisateur({ lieux, utilisateurEnEdition, onFermer, onEnregi
       setErreur('Le nom complet est requis.');
       return;
     }
+    if (!roleId) {
+      setErreur('Le rôle est requis.');
+      return;
+    }
 
     setEnvoiEnCours(true);
     try {
       if (estEdition) {
         await appelApi('PUT', `/utilisateurs/${utilisateurEnEdition.id}`, {
           nomComplet,
-          role,
+          roleId: Number(roleId),
           lieuId: lieuId || null,
         });
         if (pin) {
@@ -175,7 +186,7 @@ function FormulaireUtilisateur({ lieux, utilisateurEnEdition, onFermer, onEnregi
           nomUtilisateur,
           pin,
           nomComplet,
-          role,
+          roleId: Number(roleId),
           lieuId: lieuId || null,
         });
       }
@@ -224,9 +235,10 @@ function FormulaireUtilisateur({ lieux, utilisateurEnEdition, onFermer, onEnregi
 
         <label style={styles.champLabel}>
           Rôle *
-          <select style={styles.champInput} value={role} onChange={(e) => setRole(e.target.value)}>
-            {ROLES.map((r) => (
-              <option key={r.id} value={r.id}>{r.label}</option>
+          <select style={styles.champInput} value={roleId} onChange={(e) => setRoleId(e.target.value)}>
+            <option value="">—</option>
+            {roles.map((r) => (
+              <option key={r.id} value={r.id}>{r.nom}</option>
             ))}
           </select>
         </label>
