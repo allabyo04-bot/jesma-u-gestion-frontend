@@ -12,6 +12,7 @@ import Etats from './pages/Etats.jsx';
 import Utilisateurs from './pages/Utilisateurs.jsx';
 import Roles from './pages/Roles.jsx';
 import Depenses from './pages/Depenses.jsx';
+import Clients from './pages/Clients';
 import Parametres from './pages/Parametres.jsx';
 
 function estConnecte() {
@@ -116,6 +117,14 @@ export default function App() {
       />
       <Route path="/liste-cadeau/:codeAcces" element={<ListeCadeauPublique />} />
       <Route path="/ecran-client" element={<EcranClient />} />
+      <Route
+  path="/clients"
+  element={
+    <RouteProtegee>
+      <Clients />
+    </RouteProtegee>
+  }
+/>
     </Routes>
   );
 }

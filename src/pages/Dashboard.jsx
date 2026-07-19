@@ -4,6 +4,7 @@ import { appelApi, clearSession, getUtilisateur } from '../lib/api';
 
 const LIENS = [
   { id: 'ventes', label: 'Ventes', chemin: '/ventes', adminSeulement: false },
+  { id: 'clients', label: 'Clients', chemin: '/clients', adminSeulement: false },
   { id: 'articles', label: 'Articles', chemin: '/articles', adminSeulement: true },
   { id: 'stock', label: 'Stock', chemin: '/stock', adminSeulement: true },
   { id: 'etats', label: 'États', chemin: '/etats', adminSeulement: false },
