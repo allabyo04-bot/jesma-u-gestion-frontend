@@ -184,9 +184,23 @@ export default function Ventes() {
 
   useEffect(() => {
     appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
-    appelApi('GET', '/vendeurs').then(setVendeurs).catch(() => {});
     setVentesEnAttente(chargerVentesEnAttente());
   }, []);
+
+  // La liste des vendeurs proposés dépend de la boutique choisie : on recharge à
+  // chaque changement, et on désélectionne le vendeur en cours s'il n'est plus
+  // dans la nouvelle liste (cas d'un vendeur assigné à une autre boutique).
+  useEffect(() => {
+    const suffixe = lieuId ? `?lieuId=${lieuId}` : '';
+    appelApi('GET', `/vendeurs${suffixe}`)
+      .then((liste) => {
+        setVendeurs(liste);
+        setVendeurId((precedent) =>
+          precedent && liste.some((v) => String(v.id) === String(precedent)) ? precedent : ''
+        );
+      })
+      .catch(() => {});
+  }, [lieuId]);
 
   useEffect(() => {
     if (!estAdmin && !lieuId && lieux.length > 0) {

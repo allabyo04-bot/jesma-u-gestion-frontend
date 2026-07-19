@@ -160,16 +160,22 @@ function OngletLieux() {
 // ------------------------------------------------------------
 function OngletVendeurs() {
   const [vendeurs, setVendeurs] = useState([]);
+  const [lieux, setLieux] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState('');
   const [nomComplet, setNomComplet] = useState('');
   const [telephone, setTelephone] = useState('');
+  const [lieuId, setLieuId] = useState('');
   const [creationEnCours, setCreationEnCours] = useState(false);
   const [editionId, setEditionId] = useState(null);
   const [nomEdition, setNomEdition] = useState('');
   const [telephoneEdition, setTelephoneEdition] = useState('');
+  const [lieuIdEdition, setLieuIdEdition] = useState('');
 
-  useEffect(() => { chargerVendeurs(); }, []);
+  useEffect(() => {
+    chargerVendeurs();
+    appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
+  }, []);
 
   function chargerVendeurs() {
     setChargement(true);
@@ -185,9 +191,14 @@ function OngletVendeurs() {
     setErreur('');
     setCreationEnCours(true);
     try {
-      await appelApi('POST', '/vendeurs', { nomComplet: nomComplet.trim(), telephone: telephone.trim() || null });
+      await appelApi('POST', '/vendeurs', {
+        nomComplet: nomComplet.trim(),
+        telephone: telephone.trim() || null,
+        lieuId: lieuId || null,
+      });
       setNomComplet('');
       setTelephone('');
+      setLieuId('');
       chargerVendeurs();
     } catch (err) {
       setErreur(err.message);
@@ -200,6 +211,7 @@ function OngletVendeurs() {
     setEditionId(vendeur.id);
     setNomEdition(vendeur.nomComplet);
     setTelephoneEdition(vendeur.telephone || '');
+    setLieuIdEdition(vendeur.lieuId ? String(vendeur.lieuId) : '');
   }
 
   async function enregistrerEdition(vendeur) {
@@ -208,6 +220,7 @@ function OngletVendeurs() {
       await appelApi('PUT', `/vendeurs/${vendeur.id}`, {
         nomComplet: nomEdition.trim(),
         telephone: telephoneEdition.trim() || null,
+        lieuId: lieuIdEdition || null,
       });
       setEditionId(null);
       chargerVendeurs();
@@ -239,6 +252,12 @@ function OngletVendeurs() {
                 <>
                   <input style={styles.champInput} value={nomEdition} onChange={(e) => setNomEdition(e.target.value)} placeholder="Nom complet" />
                   <input style={styles.champInput} value={telephoneEdition} onChange={(e) => setTelephoneEdition(e.target.value)} placeholder="Téléphone (optionnel)" />
+                  <select style={styles.champInput} value={lieuIdEdition} onChange={(e) => setLieuIdEdition(e.target.value)}>
+                    <option value="">— Toutes boutiques —</option>
+                    {lieux.map((l) => (
+                      <option key={l.id} value={l.id}>{l.nom}</option>
+                    ))}
+                  </select>
                   <button onClick={() => enregistrerEdition(v)} style={styles.boutonValiderPetit}>Enregistrer</button>
                   <button onClick={() => setEditionId(null)} style={styles.boutonAnnulerPetit}>Annuler</button>
                 </>
@@ -247,6 +266,7 @@ function OngletVendeurs() {
                   <span style={{ flex: 1, opacity: v.actif ? 1 : 0.5 }}>
                     <strong>{v.nomComplet}</strong>
                     {v.telephone && <span style={styles.texteMuet}> — {v.telephone}</span>}
+                    <span style={styles.texteMuet}> — {v.lieu ? v.lieu.nom : 'Toutes boutiques'}</span>
                     {!v.actif && <span style={styles.texteMuet}> (désactivé)</span>}
                   </span>
                   <button onClick={() => ouvrirEdition(v)} style={styles.boutonModifier}>✏️</button>
@@ -274,6 +294,12 @@ function OngletVendeurs() {
           value={telephone}
           onChange={(e) => setTelephone(e.target.value)}
         />
+        <select style={styles.champInput} value={lieuId} onChange={(e) => setLieuId(e.target.value)}>
+          <option value="">— Toutes boutiques —</option>
+          {lieux.map((l) => (
+            <option key={l.id} value={l.id}>{l.nom}</option>
+          ))}
+        </select>
         <button type="submit" disabled={creationEnCours || !nomComplet.trim()} style={styles.boutonAjouter}>
           {creationEnCours ? 'Création…' : '+ Ajouter'}
         </button>
