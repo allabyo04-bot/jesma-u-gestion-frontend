@@ -95,7 +95,7 @@ export default function Etats() {
   const [raccourciActif, setRaccourciActif] = useState('aujourdhui');
 
   const [donnees, setDonnees] = useState(null);
-  const [ongletDonnees, setOngletDonnees] = useState(null);
+  const [ongletDonnees, setOngletDonnees] = useState(null); // à quel onglet correspondent les données actuelles
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState('');
   const compteurRequete = useRef(0);
@@ -105,6 +105,7 @@ export default function Etats() {
   const [fermetureChargement, setFermetureChargement] = useState(false);
   const [fermetureErreur, setFermetureErreur] = useState('');
 
+  // --- Récompenses fidélité ---
   const [recompenses, setRecompenses] = useState([]);
   const [recompensesChargement, setRecompensesChargement] = useState(false);
   const [recompensesErreur, setRecompensesErreur] = useState('');
@@ -116,6 +117,8 @@ export default function Etats() {
   const [articleIdEdition, setArticleIdEdition] = useState('');
   const [descriptionEdition, setDescriptionEdition] = useState('');
   const [actionEnCours, setActionEnCours] = useState(false);
+  const [remiseEnCoursId, setRemiseEnCoursId] = useState(null);
+  const [lieuRemiseId, setLieuRemiseId] = useState('');
 
   useEffect(() => {
     appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
@@ -138,6 +141,9 @@ export default function Etats() {
 
   async function chargerOnglet() {
     if (ongletActif === 'fermeture' || ongletActif === 'fidelite') return;
+    // Compteur de requêtes : si une réponse plus ancienne arrive après une plus récente
+    // (ex: clics rapides entre onglets), on l'ignore pour ne jamais afficher des données
+    // qui ne correspondent pas à l'onglet actuellement affiché.
     const idRequete = ++compteurRequete.current;
     const ongletDemande = ongletActif;
     setChargement(true);
@@ -239,11 +245,21 @@ export default function Etats() {
     }
   }
 
-  async function marquerRemis(recompense) {
+  function demarrerMarquageRemis(recompense) {
+    if (recompense.type === 'ARTICLE') {
+      setRemiseEnCoursId(recompense.id);
+      setLieuRemiseId('');
+    } else {
+      marquerRemis(recompense);
+    }
+  }
+
+  async function marquerRemis(recompense, lieuId) {
     setRecompensesErreur('');
     setActionEnCours(true);
     try {
-      await appelApi('POST', `/fidelite/${recompense.id}/marquer-utilisee`);
+      await appelApi('POST', `/fidelite/${recompense.id}/marquer-utilisee`, lieuId ? { lieuId: Number(lieuId) } : undefined);
+      setRemiseEnCoursId(null);
       chargerRecompenses();
     } catch (err) {
       setRecompensesErreur(err.message);
@@ -252,6 +268,7 @@ export default function Etats() {
     }
   }
 
+  // N'affiche les données que si elles correspondent bien à l'onglet actuellement sélectionné.
   const donneesAJour = donnees && ongletDonnees === ongletActif ? donnees : null;
 
   return (
@@ -485,10 +502,28 @@ export default function Etats() {
                     </div>
                     <div style={styles.boutonsCarteAttente}>
                       <button onClick={() => ouvrirDefinition(r)} style={styles.boutonReprendre}>Modifier</button>
-                      <button onClick={() => marquerRemis(r)} disabled={actionEnCours} style={styles.boutonReprendre}>
+                      <button onClick={() => demarrerMarquageRemis(r)} disabled={actionEnCours} style={styles.boutonReprendre}>
                         Marquer comme remis
                       </button>
                     </div>
+                    {remiseEnCoursId === r.id && (
+                      <div style={styles.formDefinitionCadeau}>
+                        <select style={styles.champInput} value={lieuRemiseId} onChange={(e) => setLieuRemiseId(e.target.value)}>
+                          <option value="">— D'où sort l'article ? —</option>
+                          {lieux.map((l) => (
+                            <option key={l.id} value={l.id}>{l.nom}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => marquerRemis(r, lieuRemiseId)}
+                          disabled={actionEnCours || !lieuRemiseId}
+                          style={styles.boutonReprendre}
+                        >
+                          Confirmer la sortie de stock
+                        </button>
+                        <button onClick={() => setRemiseEnCoursId(null)} style={styles.boutonRetirer}>Annuler</button>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div style={styles.boutonsCarteAttente}>
