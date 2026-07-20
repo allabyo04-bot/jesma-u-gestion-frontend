@@ -378,42 +378,42 @@ export default function Etats() {
           </label>
 
           {ongletActif !== 'fermeture' ? (
-            <>
-              <div style={styles.raccourcis}>
-                {[
-                  { id: 'aujourdhui', label: "Aujourd'hui" },
-                  { id: 'semaine', label: 'Cette semaine' },
-                  { id: 'mois', label: 'Ce mois' },
-                  { id: 'personnalise', label: 'Personnalisé' },
-                ].map((r) => (
-                  <button
-                    key={r.id}
-                    onClick={() => appliquerRaccourci(r.id)}
-                    style={r.id === raccourciActif ? styles.filtreActif : styles.filtreInactif}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-              <label style={styles.champLabel}>
-                Du
-                <input
-                  type="date"
-                  style={styles.champInput}
-                  value={dateDebut}
-                  onChange={(e) => { setDateDebut(e.target.value); setRaccourciActif('personnalise'); }}
-                />
-              </label>
-              <label style={styles.champLabel}>
-                Au
-                <input
-                  type="date"
-                  style={styles.champInput}
-                  value={dateFin}
-                  onChange={(e) => { setDateFin(e.target.value); setRaccourciActif('personnalise'); }}
-                />
-              </label>
-              {estAdmin && (
+            estAdmin ? (
+              <>
+                <div style={styles.raccourcis}>
+                  {[
+                    { id: 'aujourdhui', label: "Aujourd'hui" },
+                    { id: 'semaine', label: 'Cette semaine' },
+                    { id: 'mois', label: 'Ce mois' },
+                    { id: 'personnalise', label: 'Personnalisé' },
+                  ].map((r) => (
+                    <button
+                      key={r.id}
+                      onClick={() => appliquerRaccourci(r.id)}
+                      style={r.id === raccourciActif ? styles.filtreActif : styles.filtreInactif}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+                <label style={styles.champLabel}>
+                  Du
+                  <input
+                    type="date"
+                    style={styles.champInput}
+                    value={dateDebut}
+                    onChange={(e) => { setDateDebut(e.target.value); setRaccourciActif('personnalise'); }}
+                  />
+                </label>
+                <label style={styles.champLabel}>
+                  Au
+                  <input
+                    type="date"
+                    style={styles.champInput}
+                    value={dateFin}
+                    onChange={(e) => { setDateFin(e.target.value); setRaccourciActif('personnalise'); }}
+                  />
+                </label>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button
                     onClick={() => exporterComptable('ventes')}
@@ -430,8 +430,10 @@ export default function Etats() {
                     📤 Export dépenses (CSV)
                   </button>
                 </div>
-              )}
-            </>
+              </>
+            ) : (
+              <p style={styles.texteMuet}>Vue limitée à la journée en cours.</p>
+            )
           ) : (
             <>
               <label style={styles.champLabel}>
@@ -441,6 +443,7 @@ export default function Etats() {
                   style={styles.champInput}
                   value={dateFermeture}
                   onChange={(e) => setDateFermeture(e.target.value)}
+                  disabled={!estAdmin}
                 />
               </label>
               {fermeture && (

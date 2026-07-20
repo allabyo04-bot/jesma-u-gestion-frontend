@@ -889,7 +889,7 @@ export default function Ventes() {
           </>
         ) : ongletActif === 'historique' ? (
           <>
-            <h2 style={styles.titreOnglet}>Historique des ventes</h2>
+            <h2 style={styles.titreOnglet}>{estAdmin ? 'Historique des ventes' : "Ventes d'aujourd'hui"}</h2>
 
             {erreurHistorique && <div style={styles.bandeauErreur}>{erreurHistorique}</div>}
 
