@@ -8,14 +8,22 @@ const LIBELLES_STATUT = {
   UTILISEE: { texte: 'Utilisée', couleur: 'var(--error)' },
 };
 
+const MODES_PAIEMENT = [
+  'Espèces', 'Moov Money', 'MTN Money', 'Orange Money',
+  'Wave', 'Carte bancaire',
+];
+
 export default function CartesCadeaux() {
   const navigate = useNavigate();
   const [denominations, setDenominations] = useState([]);
   const [cartes, setCartes] = useState([]);
+  const [lieux, setLieux] = useState([]);
   const [chargement, setChargement] = useState(true);
 
   const [codeBarre, setCodeBarre] = useState('');
   const [denomination, setDenomination] = useState('');
+  const [lieuId, setLieuId] = useState('');
+  const [modePaiement, setModePaiement] = useState(MODES_PAIEMENT[0]);
   const [erreur, setErreur] = useState('');
   const [succes, setSucces] = useState('');
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
@@ -33,6 +41,7 @@ export default function CartesCadeaux() {
 
   useEffect(() => {
     charger();
+    appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
   }, []);
 
   function charger() {
@@ -58,11 +67,17 @@ export default function CartesCadeaux() {
       setErreur('Code-barres et dénomination requis.');
       return;
     }
+    if (!lieuId) {
+      setErreur('Sélectionnez la boutique.');
+      return;
+    }
     setEnvoiEnCours(true);
     try {
       const carte = await appelApi('POST', '/cartes-cadeaux/activer', {
         codeBarre: codeBarre.trim(),
         denomination: Number(denomination),
+        lieuId: Number(lieuId),
+        modePaiement,
       });
       setSucces(`Carte ${carte.codeBarre} activée avec ${Number(denomination).toLocaleString('fr-FR')} F.`);
       setCodeBarre('');
@@ -138,6 +153,23 @@ export default function CartesCadeaux() {
                 ))}
               </select>
             </label>
+            <label style={styles.champLabel}>
+              Boutique
+              <select style={styles.champInput} value={lieuId} onChange={(e) => setLieuId(e.target.value)}>
+                <option value="">—</option>
+                {lieux.map((l) => (
+                  <option key={l.id} value={l.id}>{l.nom}</option>
+                ))}
+              </select>
+            </label>
+            <label style={styles.champLabel}>
+              Mode de paiement reçu
+              <select style={styles.champInput} value={modePaiement} onChange={(e) => setModePaiement(e.target.value)}>
+                {MODES_PAIEMENT.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </label>
             <button type="submit" disabled={envoiEnCours} style={styles.boutonValider}>
               {envoiEnCours ? 'Activation…' : 'Activer la carte'}
             </button>
@@ -171,7 +203,7 @@ export default function CartesCadeaux() {
               <h4 style={{ marginTop: 14, marginBottom: 6, fontSize: 13 }}>Historique des cycles</h4>
               {carteConsultee.cycles.map((c) => (
                 <div key={c.id} style={styles.ligneCycle}>
-                  <span>{Number(c.denomination).toLocaleString('fr-FR')} F</span>
+                  <span>{Number(c.denomination).toLocaleString('fr-FR')} F{c.modePaiement ? ` — ${c.modePaiement}` : ''}{c.lieu ? ` — ${c.lieu.nom}` : ''}</span>
                   <span style={styles.texteMuet}>
                     Activée {new Date(c.dateActivation).toLocaleDateString('fr-FR')}
                     {c.dateUtilisation && ` — Utilisée ${new Date(c.dateUtilisation).toLocaleDateString('fr-FR')}`}

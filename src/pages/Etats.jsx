@@ -708,6 +708,10 @@ export default function Etats() {
                 <div style={styles.carteValeur}>{donneesAJour.totalRemises.toLocaleString('fr-FR')} F</div>
               </div>
               <div style={styles.carte}>
+                <div style={styles.carteLabel}>Cartes cadeaux activées</div>
+                <div style={styles.carteValeur}>{donneesAJour.totalCartesCadeaux.toLocaleString('fr-FR')} F</div>
+              </div>
+              <div style={styles.carte}>
                 <div style={styles.carteLabel}>Dépenses</div>
                 <div style={styles.carteValeur}>{donneesAJour.totalDepenses.toLocaleString('fr-FR')} F</div>
               </div>
