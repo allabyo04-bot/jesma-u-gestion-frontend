@@ -71,6 +71,36 @@ export async function recupererHtmlAvecAuth(chemin) {
   }
   return texte;
 }
+
+// Télécharge un fichier protégé par connexion (ex: export CSV) — impossible via un lien
+// classique car le token ne serait pas transmis. Déclenche le téléchargement directement
+// dans le navigateur, avec le nom de fichier fourni.
+export async function telechargerFichierAvecAuth(chemin, nomFichier) {
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const reponse = await fetch(`${BASE_URL}${chemin}`, { headers });
+  if (!reponse.ok) {
+    let message = 'Échec du téléchargement.';
+    try {
+      const data = await reponse.json();
+      if (data && data.error) message = data.error;
+    } catch { /* réponse non JSON, on garde le message générique */ }
+    throw new Error(message);
+  }
+
+  const blob = await reponse.blob();
+  const url = window.URL.createObjectURL(blob);
+  const lien = document.createElement('a');
+  lien.href = url;
+  lien.download = nomFichier;
+  document.body.appendChild(lien);
+  lien.click();
+  lien.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 // Upload multipart générique (fichier Excel d'import stock)
 export async function uploaderFichierImport(fichier) {
   const headers = {};

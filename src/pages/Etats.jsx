@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { appelApi, getUtilisateur } from '../lib/api';
+import { appelApi, getUtilisateur, telechargerFichierAvecAuth } from '../lib/api';
 
 function formatDate(d) {
   return d.toISOString().slice(0, 10);
@@ -49,8 +49,6 @@ function imprimerFermetureCaisse(fermeture, lieuNom) {
   ${fermeture.parModePaiement.map((m) => `<div class="ligne"><span>${m.mode}</span><span>${m.montant.toLocaleString('fr-FR')} F</span></div>`).join('')}
   <hr>
   <div class="ligne total"><span>Total encaissé</span><span>${fermeture.totalEncaisse.toLocaleString('fr-FR')} F</span></div>
-  <div class="ligne"><span>Dépenses du jour</span><span>${fermeture.totalDepenses.toLocaleString('fr-FR')} F</span></div>
-  <div class="ligne total"><span>Résultat net</span><span>${fermeture.resultatNet.toLocaleString('fr-FR')} F</span></div>
   <hr>
   <div class="section-titre">Avoirs</div>
   <div class="ligne"><span>Émis (${fermeture.avoirsEmis.nombre})</span><span>${fermeture.avoirsEmis.montant.toLocaleString('fr-FR')} F</span></div>
@@ -98,6 +96,7 @@ export default function Etats() {
   const [ongletDonnees, setOngletDonnees] = useState(null); // à quel onglet correspondent les données actuelles
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState('');
+  const [exportEnCours, setExportEnCours] = useState(false);
   const compteurRequete = useRef(0);
 
   const [dateFermeture, setDateFermeture] = useState(formatDate(new Date()));
@@ -177,6 +176,21 @@ export default function Etats() {
   useEffect(() => {
     chargerOnglet();
   }, [ongletActif, dateDebut, dateFin, lieuId]);
+
+  async function exporterComptable(type) {
+    setErreur('');
+    setExportEnCours(true);
+    try {
+      const params = new URLSearchParams({ dateDebut, dateFin });
+      if (lieuId) params.set('lieuId', lieuId);
+      const chemin = `/etats/${type}/export.csv?${params.toString()}`;
+      await telechargerFichierAvecAuth(chemin, `${type}-${dateDebut}-au-${dateFin}.csv`);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setExportEnCours(false);
+    }
+  }
 
   async function chargerFermeture() {
     setFermetureChargement(true);
@@ -357,6 +371,24 @@ export default function Etats() {
                   onChange={(e) => { setDateFin(e.target.value); setRaccourciActif('personnalise'); }}
                 />
               </label>
+              {estAdmin && (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => exporterComptable('ventes')}
+                    disabled={exportEnCours}
+                    style={styles.boutonImprimer}
+                  >
+                    📤 Export ventes (CSV)
+                  </button>
+                  <button
+                    onClick={() => exporterComptable('depenses')}
+                    disabled={exportEnCours}
+                    style={styles.boutonImprimer}
+                  >
+                    📤 Export dépenses (CSV)
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -395,14 +427,6 @@ export default function Etats() {
               <div style={styles.carte}>
                 <div style={styles.carteLabel}>Total encaissé</div>
                 <div style={styles.carteValeur}>{fermeture.totalEncaisse.toLocaleString('fr-FR')} F</div>
-              </div>
-              <div style={styles.carte}>
-                <div style={styles.carteLabel}>Dépenses du jour</div>
-                <div style={styles.carteValeur}>{fermeture.totalDepenses.toLocaleString('fr-FR')} F</div>
-              </div>
-              <div style={styles.carte}>
-                <div style={styles.carteLabel}>Résultat net</div>
-                <div style={styles.carteValeur}>{fermeture.resultatNet.toLocaleString('fr-FR')} F</div>
               </div>
 
               <div style={{ ...styles.carte, gridColumn: '1 / -1' }}>
