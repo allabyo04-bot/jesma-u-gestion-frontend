@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { appelApi, getUtilisateur } from '../lib/api';
 import { diffuserEtatPanier, diffuserVenteValidee, ecouterCanal } from '../lib/broadcast';
 
@@ -116,6 +116,7 @@ function imprimerTicketDepuisHtml(html) {
 
 export default function Ventes() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const utilisateur = getUtilisateur();
   const estAdmin = utilisateur?.role === 'ADMIN';
   const [ongletActif, setOngletActif] = useState('nouvelle');
@@ -133,6 +134,11 @@ export default function Ventes() {
   const [lieuId, setLieuId] = useState('');
   const [vendeurId, setVendeurId] = useState('');
   const [typeVente, setTypeVente] = useState('Comptant');
+
+  // --- Client de la vente en cours ---
+  const [clients, setClients] = useState([]);
+  const [clientId, setClientId] = useState('');
+  const [clientSearch, setClientSearch] = useState('');
 
   const [paiements, setPaiements] = useState([]);
   const [modeAAjouter, setModeAAjouter] = useState(MODES_PAIEMENT[0]);
@@ -184,8 +190,22 @@ export default function Ventes() {
 
   useEffect(() => {
     appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
+    appelApi('GET', '/clients').then(setClients).catch(() => {});
     setVentesEnAttente(chargerVentesEnAttente());
   }, []);
+
+  // Si on arrive depuis la fiche d'un client fraîchement créé (?clientId=123), on le
+  // présélectionne automatiquement dès que la liste des clients est chargée, puis on
+  // retire le paramètre de l'URL pour ne pas le réappliquer à une prochaine vente.
+  useEffect(() => {
+    const idDepuisUrl = searchParams.get('clientId');
+    if (idDepuisUrl && clients.some((c) => String(c.id) === idDepuisUrl)) {
+      setClientId(idDepuisUrl);
+      setOngletActif('nouvelle');
+      setSearchParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clients]);
 
   // La liste des vendeurs proposés dépend de la boutique choisie : on recharge à
   // chaque changement, et on désélectionne le vendeur en cours s'il n'est plus
@@ -523,6 +543,8 @@ export default function Ventes() {
     setPanier([]);
     setRemiseMontant('');
     setMotifRemise('');
+    setClientId('');
+    setClientSearch('');
     setPaiements([]);
     setMontantAAjouter('');
     setTypeVente('Comptant');
@@ -583,6 +605,7 @@ export default function Ventes() {
       motifRemise,
       lieuId,
       vendeurId,
+      clientId,
       typeVente,
     };
 
@@ -600,6 +623,7 @@ export default function Ventes() {
     setMotifRemise(vente.motifRemise);
     setLieuId(vente.lieuId);
     setVendeurId(vente.vendeurId);
+    setClientId(vente.clientId || '');
     setTypeVente(vente.typeVente);
     setPaiements([]);
 
@@ -639,11 +663,24 @@ export default function Ventes() {
       return;
     }
 
+    // Un client est toujours associé à la vente, quitte à retomber sur "Client Comptoir"
+    // si la caissière n'en a choisi aucun (client anonyme).
+    let idClientFinal = clientId ? Number(clientId) : null;
+    if (!idClientFinal) {
+      const comptoir = clients.find((c) => c.nomComplet === 'Client Comptoir');
+      if (!comptoir) {
+        setErreurVente('Aucun client sélectionné, et "Client Comptoir" n\'existe pas encore — crée-le une fois dans Clients.');
+        return;
+      }
+      idClientFinal = comptoir.id;
+    }
+
     setVenteEnCours(true);
     try {
       const vente = await appelApi('POST', '/ventes', {
         lieuId: Number(lieuId),
         vendeurId: vendeurId ? Number(vendeurId) : null,
+        clientId: idClientFinal,
         typeVente: estCredit ? 'CREDIT' : 'COMPTANT',
         remiseMontant: remise > 0 ? remise : undefined,
         motifRemise: motifRemise || undefined,
@@ -1109,11 +1146,54 @@ export default function Ventes() {
             </div>
 
             <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-              <div style={styles.blocClient}>
-                <label style={styles.champLabel}>
-                  Client
-                  <input style={styles.champInput} placeholder="Rechercher un client…" />
-                </label>
+              <div style={{ ...styles.blocClient, position: 'relative' }}>
+                <span style={{ ...styles.champLabel, marginBottom: 4 }}>Client</span>
+                {clientId ? (
+                  <div style={styles.lignePaiement}>
+                    <span>{clients.find((c) => String(c.id) === String(clientId))?.nomComplet || '—'}</span>
+                    <button onClick={() => { setClientId(''); setClientSearch(''); }} style={styles.boutonRetirer}>✕</button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      style={styles.champInput}
+                      placeholder="Rechercher un client (nom ou téléphone)…"
+                      value={clientSearch}
+                      onChange={(e) => setClientSearch(e.target.value)}
+                    />
+                    {clientSearch.trim() && (
+                      <div style={styles.listeResultatsClient}>
+                        {clients
+                          .filter((c) =>
+                            c.nomComplet.toLowerCase().includes(clientSearch.toLowerCase()) ||
+                            (c.telephone || '').includes(clientSearch)
+                          )
+                          .slice(0, 6)
+                          .map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => { setClientId(String(c.id)); setClientSearch(''); }}
+                              style={styles.itemResultatClient}
+                            >
+                              {c.nomComplet}{c.telephone ? ` — ${c.telephone}` : ''}
+                            </button>
+                          ))}
+                        {clients.filter((c) =>
+                          c.nomComplet.toLowerCase().includes(clientSearch.toLowerCase()) ||
+                          (c.telephone || '').includes(clientSearch)
+                        ).length === 0 && (
+                          <div style={{ padding: '8px 10px', fontSize: 13, color: 'var(--brown-soft)' }}>
+                            Aucun client trouvé.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+                <p style={{ ...styles.texteMuet, marginTop: 4 }}>
+                  Laissé vide, la vente est associée à "Client Comptoir".
+                </p>
               </div>
 
               <div style={{ maxWidth: 340 }}>
@@ -1392,6 +1472,8 @@ const styles = {
   blocBoutiqueVendeur: { display: 'flex', gap: 12 },
   blocModeVente: { display: 'flex', gap: 12 },
   blocClient: { maxWidth: 340 },
+  listeResultatsClient: { position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--white)', border: '1px solid var(--cream-deep)', borderRadius: 8, marginTop: 4, zIndex: 20, maxHeight: 220, overflowY: 'auto', boxShadow: '0 4px 12px rgba(74,44,23,0.15)' },
+  itemResultatClient: { display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', borderBottom: '1px solid var(--cream-deep)', background: 'transparent', cursor: 'pointer', fontSize: 13 },
   champLabel: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600 },
   texteVerrouille: { fontWeight: 400, fontSize: 11, color: 'var(--brown-soft)' },
   champInput: { padding: '8px 10px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14, minWidth: 160 },

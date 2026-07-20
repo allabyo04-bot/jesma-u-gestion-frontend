@@ -220,6 +220,7 @@ function FicheClient({ clientId, onFermer, onModifie }) {
 }
 
 function FormulaireNouveauClient({ onFermer, onCree }) {
+  const navigate = useNavigate();
   const [nomComplet, setNomComplet] = useState('');
   const [telephone, setTelephone] = useState('');
   const [email, setEmail] = useState('');
@@ -235,12 +236,12 @@ function FormulaireNouveauClient({ onFermer, onCree }) {
     }
     setEnvoiEnCours(true);
     try {
-      await appelApi('POST', '/clients', {
+      const client = await appelApi('POST', '/clients', {
         nomComplet: nomComplet.trim(),
         telephone: telephone.trim() || null,
         email: email.trim() || null,
       });
-      onCree();
+      navigate(`/ventes?clientId=${client.id}`);
     } catch (err) {
       setErreur(err.message);
     } finally {
