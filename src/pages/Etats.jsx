@@ -80,6 +80,7 @@ export default function Etats() {
     { id: 'type', label: 'Par type' },
     { id: 'vendeur', label: 'Meilleur vendeur' },
     ...(estAdmin ? [{ id: 'boutique', label: 'Récap boutiques' }] : []),
+    ...(estAdmin ? [{ id: 'journal', label: "Journal d'activité" }] : []),
     { id: 'fermeture', label: 'Fermeture de caisse' },
     { id: 'fidelite', label: 'Récompenses fidélité' },
   ];
@@ -119,6 +120,12 @@ export default function Etats() {
   const [remiseEnCoursId, setRemiseEnCoursId] = useState(null);
   const [lieuRemiseId, setLieuRemiseId] = useState('');
 
+  // --- Journal d'activité ---
+  const [journal, setJournal] = useState([]);
+  const [journalChargement, setJournalChargement] = useState(false);
+  const [journalErreur, setJournalErreur] = useState('');
+  const [journalTypeFiltre, setJournalTypeFiltre] = useState('');
+
   useEffect(() => {
     appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
   }, []);
@@ -139,7 +146,7 @@ export default function Etats() {
   }
 
   async function chargerOnglet() {
-    if (ongletActif === 'fermeture' || ongletActif === 'fidelite') return;
+    if (ongletActif === 'fermeture' || ongletActif === 'fidelite' || ongletActif === 'journal') return;
     // Compteur de requêtes : si une réponse plus ancienne arrive après une plus récente
     // (ex: clics rapides entre onglets), on l'ignore pour ne jamais afficher des données
     // qui ne correspondent pas à l'onglet actuellement affiché.
@@ -232,6 +239,21 @@ export default function Etats() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ongletActif, statutFiltre]);
 
+  function chargerJournal() {
+    setJournalChargement(true);
+    setJournalErreur('');
+    const params = journalTypeFiltre ? `?type=${journalTypeFiltre}` : '';
+    appelApi('GET', `/journal${params}`)
+      .then(setJournal)
+      .catch((err) => setJournalErreur(err.message))
+      .finally(() => setJournalChargement(false));
+  }
+
+  useEffect(() => {
+    if (ongletActif === 'journal') chargerJournal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ongletActif, journalTypeFiltre]);
+
   function ouvrirDefinition(recompense) {
     setEditionId(recompense.id);
     setTypeEdition(recompense.type === 'A_DEFINIR' ? 'REMISE' : recompense.type);
@@ -319,6 +341,26 @@ export default function Etats() {
                 style={s.id === statutFiltre ? styles.filtreActif : styles.filtreInactif}
               >
                 {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : ongletActif === 'journal' ? (
+        <div style={styles.blocFiltres}>
+          <div style={styles.raccourcis}>
+            {[
+              { id: '', label: 'Tout' },
+              { id: 'ANNULATION_VENTE', label: 'Annulations de ventes' },
+              { id: 'REMISE_APPROUVEE', label: 'Remises approuvées' },
+              { id: 'REMISE_REFUSEE', label: 'Remises refusées' },
+              { id: 'MODIFICATION_PRIX_ARTICLE', label: 'Modifications de prix' },
+            ].map((t) => (
+              <button
+                key={t.id || 'tout'}
+                onClick={() => setJournalTypeFiltre(t.id)}
+                style={t.id === journalTypeFiltre ? styles.filtreActif : styles.filtreInactif}
+              >
+                {t.label}
               </button>
             ))}
           </div>
@@ -554,6 +596,28 @@ export default function Etats() {
                     <button onClick={() => ouvrirDefinition(r)} style={styles.boutonReprendre}>Définir le cadeau</button>
                   </div>
                 )}
+              </div>
+            ))}
+          </div>
+        </>
+      ) : ongletActif === 'journal' ? (
+        <>
+          {journalErreur && <div style={styles.bandeauErreur}>{journalErreur}</div>}
+          {journalChargement && <p style={styles.texteMuet}>Chargement…</p>}
+          {!journalChargement && journal.length === 0 && (
+            <p style={styles.texteMuet}>Aucune activité enregistrée pour l'instant.</p>
+          )}
+          <div style={styles.tableauWrapper}>
+            {journal.map((entree) => (
+              <div key={entree.id} style={styles.carteAttente}>
+                <div style={styles.enTeteCarteAttente}>
+                  <span style={{ fontWeight: 700 }}>{entree.description}</span>
+                  <span style={styles.texteMuet}>
+                    {new Date(entree.createdAt).toLocaleDateString('fr-FR')}{' '}
+                    {new Date(entree.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div style={styles.texteMuet}>Par {entree.utilisateur?.nomComplet || '—'}</div>
               </div>
             ))}
           </div>
