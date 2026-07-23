@@ -78,6 +78,7 @@ function OngletReception({ lieux, articles }) {
   const [articleAAjouter, setArticleAAjouter] = useState('');
   const [quantiteAAjouter, setQuantiteAAjouter] = useState('1');
   const [prixAchatAAjouter, setPrixAchatAAjouter] = useState('');
+  const [datePeremptionAAjouter, setDatePeremptionAAjouter] = useState('');
   const [notes, setNotes] = useState('');
   const [erreur, setErreur] = useState('');
   const [succes, setSucces] = useState('');
@@ -107,6 +108,7 @@ function OngletReception({ lieux, articles }) {
     const article = articles.find((a) => a.id === Number(id));
     // Pré-remplit avec le dernier prix d'achat connu, modifiable si le fournisseur a changé son prix.
     setPrixAchatAAjouter(article ? String(article.prixAchat ?? '') : '');
+    setDatePeremptionAAjouter('');
   }
 
   // Recherche locale dans la liste d'articles déjà chargée : correspondance exacte
@@ -174,17 +176,22 @@ function OngletReception({ lieux, articles }) {
           designation: article.designation,
           quantite: Number(quantiteAAjouter),
           prixAchat: Number(prixAchatAAjouter) || 0,
+          datePeremption: datePeremptionAAjouter || null,
         },
       ];
     });
     setArticleAAjouter('');
     setQuantiteAAjouter('1');
     setPrixAchatAAjouter('');
+    setDatePeremptionAAjouter('');
   }
 
   function retirerLigne(articleId) {
     setLignes((prec) => prec.filter((l) => l.articleId !== articleId));
   }
+
+  const articleSelectionne = articles.find((a) => a.id === Number(articleAAjouter));
+  const estCosmetique = articleSelectionne?.famille?.nom === 'Cosmétique';
 
   async function validerReception() {
     setErreur('');
@@ -209,6 +216,7 @@ function OngletReception({ lieux, articles }) {
           articleId: l.articleId,
           quantite: l.quantite,
           prixAchat: l.prixAchat,
+          datePeremption: l.datePeremption || undefined,
         })),
       });
       setSucces('Réception enregistrée avec succès — le stock a été mis à jour.');
@@ -324,6 +332,17 @@ function OngletReception({ lieux, articles }) {
               onChange={(e) => setPrixAchatAAjouter(e.target.value)}
             />
           </label>
+          {estCosmetique && (
+            <label style={styles.champLabel}>
+              Péremption
+              <input
+                type="date"
+                style={{ ...styles.champInput, width: 150 }}
+                value={datePeremptionAAjouter}
+                onChange={(e) => setDatePeremptionAAjouter(e.target.value)}
+              />
+            </label>
+          )}
           <button onClick={ajouterLigne} style={styles.boutonAjouter}>Ajouter</button>
         </div>
 
@@ -332,7 +351,10 @@ function OngletReception({ lieux, articles }) {
             {lignes.map((l) => (
               <div key={l.articleId} style={styles.ligneItem}>
                 <span>{l.designation}</span>
-                <span style={{ fontWeight: 600 }}>× {l.quantite} — {l.prixAchat.toLocaleString('fr-FR')} F/u</span>
+                <span style={{ fontWeight: 600 }}>
+                  × {l.quantite} — {l.prixAchat.toLocaleString('fr-FR')} F/u
+                  {l.datePeremption && ` — Périme le ${new Date(l.datePeremption).toLocaleDateString('fr-FR')}`}
+                </span>
                 <button onClick={() => retirerLigne(l.articleId)} style={styles.boutonRetirer}>✕</button>
               </div>
             ))}

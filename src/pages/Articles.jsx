@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { appelApi, uploaderPhotoArticle, recupererHtmlAvecAuth } from '../lib/api';
+import { appelApi, uploaderPhotoArticle, envoyerEtRecupererHtmlAvecAuth } from '../lib/api';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'https://jesma-u-gestion-backend-production.up.railway.app/api';
 
@@ -13,6 +13,24 @@ export default function Articles() {
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [articleEnEdition, setArticleEnEdition] = useState(null);
   const [nombreAImprimer, setNombreAImprimer] = useState(0);
+
+  // --- Panneau "étiquettes en attente" (file alimentée par les réceptions) ---
+  const [panneauEtiquettesOuvert, setPanneauEtiquettesOuvert] = useState(false);
+  const [articlesAImprimer, setArticlesAImprimer] = useState([]);
+  const [quantitesEtiquettes, setQuantitesEtiquettes] = useState({});
+  const [chargementEtiquettes, setChargementEtiquettes] = useState(false);
+  const [impressionEnCours, setImpressionEnCours] = useState(false);
+  const [erreurEtiquettes, setErreurEtiquettes] = useState('');
+
+  // --- Réimpression à la demande (n'importe quel article, pas seulement la file) ---
+  const [panneauReimpressionOuvert, setPanneauReimpressionOuvert] = useState(false);
+  const [rechercheReimpression, setRechercheReimpression] = useState('');
+  const [resultatsReimpression, setResultatsReimpression] = useState([]);
+  const [rechercheReimpressionEnCours, setRechercheReimpressionEnCours] = useState(false);
+  const [articleChoisiReimpression, setArticleChoisiReimpression] = useState(null);
+  const [quantiteReimpression, setQuantiteReimpression] = useState('1');
+  const [erreurReimpression, setErreurReimpression] = useState('');
+  const [impressionReimpressionEnCours, setImpressionReimpressionEnCours] = useState(false);
 
   useEffect(() => {
     chargerDonnees();
@@ -45,14 +63,88 @@ export default function Articles() {
     rafraichirCompteurImpression();
   }
 
-  async function ouvrirImpressionEtiquettes() {
+  async function ouvrirPanneauEtiquettes() {
+    setPanneauEtiquettesOuvert(true);
+    setErreurEtiquettes('');
+    setChargementEtiquettes(true);
     try {
-      const html = await recupererHtmlAvecAuth('/articles/a-imprimer/etiquettes');
+      const liste = await appelApi('GET', '/articles/a-imprimer');
+      setArticlesAImprimer(liste);
+      const quantitesInitiales = {};
+      for (const a of liste) {
+        quantitesInitiales[a.id] = a.quantiteAImprimer > 0 ? a.quantiteAImprimer : 1;
+      }
+      setQuantitesEtiquettes(quantitesInitiales);
+    } catch (err) {
+      setErreurEtiquettes(err.message);
+    } finally {
+      setChargementEtiquettes(false);
+    }
+  }
+
+  async function lancerImpressionEtiquettes() {
+    const lignes = articlesAImprimer
+      .map((a) => ({ articleId: a.id, quantite: Number(quantitesEtiquettes[a.id]) || 0 }))
+      .filter((l) => l.quantite > 0);
+    if (lignes.length === 0) return;
+
+    setImpressionEnCours(true);
+    setErreurEtiquettes('');
+    try {
+      const html = await envoyerEtRecupererHtmlAvecAuth('/articles/a-imprimer/etiquettes', { lignes });
       const fenetre = window.open('', '_blank');
       fenetre.document.write(html);
       fenetre.document.close();
+      setPanneauEtiquettesOuvert(false);
+      rafraichirCompteurImpression();
     } catch (err) {
-      alert("Impossible d'ouvrir les étiquettes : " + err.message);
+      setErreurEtiquettes(err.message);
+    } finally {
+      setImpressionEnCours(false);
+    }
+  }
+
+  function ouvrirPanneauReimpression() {
+    setPanneauReimpressionOuvert(true);
+    setRechercheReimpression('');
+    setResultatsReimpression([]);
+    setArticleChoisiReimpression(null);
+    setQuantiteReimpression('1');
+    setErreurReimpression('');
+  }
+
+  async function rechercherPourReimpression(texte) {
+    setRechercheReimpression(texte);
+    setArticleChoisiReimpression(null);
+    if (texte.trim().length < 2) { setResultatsReimpression([]); return; }
+    setRechercheReimpressionEnCours(true);
+    try {
+      const reponse = await appelApi('GET', `/articles/recherche?q=${encodeURIComponent(texte.trim())}`);
+      setResultatsReimpression(reponse.resultats || []);
+    } catch {
+      setResultatsReimpression([]);
+    } finally {
+      setRechercheReimpressionEnCours(false);
+    }
+  }
+
+  async function imprimerReimpression() {
+    if (!articleChoisiReimpression) { setErreurReimpression('Choisis un article dans les résultats.'); return; }
+    const quantite = Math.max(1, Number(quantiteReimpression) || 0);
+    setErreurReimpression('');
+    setImpressionReimpressionEnCours(true);
+    try {
+      const html = await envoyerEtRecupererHtmlAvecAuth('/articles/a-imprimer/etiquettes', {
+        lignes: [{ articleId: articleChoisiReimpression.id, quantite }],
+      });
+      const fenetre = window.open('', '_blank');
+      fenetre.document.write(html);
+      fenetre.document.close();
+      setPanneauReimpressionOuvert(false);
+    } catch (err) {
+      setErreurReimpression(err.message);
+    } finally {
+      setImpressionReimpressionEnCours(false);
     }
   }
 
@@ -75,10 +167,13 @@ export default function Articles() {
         <h1 style={styles.titre}>Articles</h1>
         <div style={{ display: 'flex', gap: 10 }}>
           {nombreAImprimer > 0 && (
-            <button onClick={ouvrirImpressionEtiquettes} style={styles.boutonImprimer}>
+            <button onClick={ouvrirPanneauEtiquettes} style={styles.boutonImprimer}>
               🖨️ Étiquettes à imprimer ({nombreAImprimer})
             </button>
           )}
+          <button onClick={ouvrirPanneauReimpression} style={styles.boutonRetour}>
+            🖨️ Réimprimer une étiquette
+          </button>
           <button onClick={ouvrirCreation} style={styles.boutonAjouter}>
             + Nouvel article
           </button>
@@ -118,6 +213,133 @@ export default function Articles() {
             setFormulaireOuvert(false);
           }}
         />
+      )}
+
+      {panneauEtiquettesOuvert && (
+        <div style={styles.overlay} onClick={() => setPanneauEtiquettesOuvert(false)}>
+          <div style={styles.panneauEtiquettes} onClick={(e) => e.stopPropagation()}>
+            <h2 style={styles.titreFormulaire}>Étiquettes à imprimer</h2>
+            <p style={{ fontSize: 13, color: 'var(--brown-soft)', marginTop: -8 }}>
+              La quantité proposée correspond à ce qui a été mis en stock — modifie-la si besoin avant d'imprimer.
+            </p>
+
+            {erreurEtiquettes && <p style={{ color: 'var(--error)' }}>{erreurEtiquettes}</p>}
+            {chargementEtiquettes && <p>Chargement…</p>}
+
+            {!chargementEtiquettes && (
+              <div style={styles.listeEtiquettes}>
+                {articlesAImprimer.map((a) => (
+                  <div key={a.id} style={styles.ligneEtiquette}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{a.designation}</div>
+                      <div style={{ fontSize: 12, color: 'var(--brown-soft)' }}>{a.reference}</div>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      style={styles.champQuantite}
+                      value={quantitesEtiquettes[a.id] ?? 0}
+                      onChange={(e) =>
+                        setQuantitesEtiquettes((prec) => ({ ...prec, [a.id]: e.target.value }))
+                      }
+                    />
+                  </div>
+                ))}
+                {articlesAImprimer.length === 0 && <p>Aucune étiquette en attente.</p>}
+              </div>
+            )}
+
+            <div style={styles.boutonsFormulaire}>
+              <button type="button" onClick={() => setPanneauEtiquettesOuvert(false)} style={styles.boutonAnnuler}>
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={lancerImpressionEtiquettes}
+                disabled={impressionEnCours || chargementEtiquettes}
+                style={styles.boutonValider}
+              >
+                {impressionEnCours ? 'Impression…' : 'Imprimer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {panneauReimpressionOuvert && (
+        <div style={styles.overlay} onClick={() => setPanneauReimpressionOuvert(false)}>
+          <div style={styles.panneauEtiquettes} onClick={(e) => e.stopPropagation()}>
+            <h2 style={styles.titreFormulaire}>Réimprimer une étiquette</h2>
+            <p style={{ fontSize: 13, color: 'var(--brown-soft)', marginTop: -8 }}>
+              Recherche n'importe quel article (même ancien, déjà en stock depuis longtemps).
+            </p>
+
+            <input
+              autoFocus
+              style={styles.champQuantite2}
+              placeholder="Désignation ou référence…"
+              value={rechercheReimpression}
+              onChange={(e) => rechercherPourReimpression(e.target.value)}
+            />
+
+            {erreurReimpression && <p style={{ color: 'var(--error)' }}>{erreurReimpression}</p>}
+            {rechercheReimpressionEnCours && <p style={{ color: 'var(--brown-soft)' }}>Recherche…</p>}
+
+            {!rechercheReimpressionEnCours && resultatsReimpression.length > 0 && !articleChoisiReimpression && (
+              <div style={styles.listeEtiquettes}>
+                {resultatsReimpression.map((a) => (
+                  <div
+                    key={a.id}
+                    style={{ ...styles.ligneEtiquette, cursor: 'pointer' }}
+                    onClick={() => setArticleChoisiReimpression(a)}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{a.designation}</div>
+                      <div style={{ fontSize: 12, color: 'var(--brown-soft)' }}>{a.reference}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {articleChoisiReimpression && (
+              <div style={styles.ligneEtiquette}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{articleChoisiReimpression.designation}</div>
+                  <div style={{ fontSize: 12, color: 'var(--brown-soft)' }}>{articleChoisiReimpression.reference}</div>
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  style={styles.champQuantite}
+                  value={quantiteReimpression}
+                  onChange={(e) => setQuantiteReimpression(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setArticleChoisiReimpression(null)}
+                  style={{ ...styles.boutonEditer, marginLeft: 8 }}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            <div style={styles.boutonsFormulaire}>
+              <button type="button" onClick={() => setPanneauReimpressionOuvert(false)} style={styles.boutonAnnuler}>
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={imprimerReimpression}
+                disabled={impressionReimpressionEnCours || !articleChoisiReimpression}
+                style={styles.boutonValider}
+              >
+                {impressionReimpressionEnCours ? 'Impression…' : 'Imprimer'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -496,4 +718,10 @@ const styles = {
   boutonsFormulaire: { display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 },
   boutonAnnuler: { padding: '10px 16px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer' },
   boutonValider: { padding: '10px 16px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
+  panneauEtiquettes: { background: 'var(--white)', borderRadius: 16, padding: 28, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 },
+  listeEtiquettes: { display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 320, overflowY: 'auto' },
+  ligneEtiquette: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: 'var(--cream)' },
+  champQuantite: { width: 70, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14, textAlign: 'center' },
+  champQuantite2: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14, boxSizing: 'border-box' },
+  boutonEditer: { border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--brown-soft)', fontSize: 13 },
 };

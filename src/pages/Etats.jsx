@@ -83,6 +83,7 @@ export default function Etats() {
     ...(estAdmin ? [{ id: 'journal', label: "Journal d'activité" }] : []),
     { id: 'fermeture', label: 'Fermeture de caisse' },
     { id: 'fidelite', label: 'Récompenses fidélité' },
+    { id: 'peremption', label: 'Péremption' },
   ];
 
   const [ongletActif, setOngletActif] = useState('date');
@@ -146,7 +147,7 @@ export default function Etats() {
   }
 
   async function chargerOnglet() {
-    if (ongletActif === 'fermeture' || ongletActif === 'fidelite' || ongletActif === 'journal') return;
+    if (ongletActif === 'fermeture' || ongletActif === 'fidelite' || ongletActif === 'journal' || ongletActif === 'peremption') return;
     // Compteur de requêtes : si une réponse plus ancienne arrive après une plus récente
     // (ex: clics rapides entre onglets), on l'ignore pour ne jamais afficher des données
     // qui ne correspondent pas à l'onglet actuellement affiché.
@@ -238,6 +239,25 @@ export default function Etats() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ongletActif, statutFiltre]);
+
+  const [peremption, setPeremption] = useState([]);
+  const [peremptionChargement, setPeremptionChargement] = useState(false);
+  const [peremptionErreur, setPeremptionErreur] = useState('');
+  const [peremptionJours, setPeremptionJours] = useState('60');
+
+  function chargerPeremption() {
+    setPeremptionChargement(true);
+    setPeremptionErreur('');
+    appelApi('GET', `/etats/peremption-proche?jours=${peremptionJours}`)
+      .then((reponse) => setPeremption(reponse.resultats))
+      .catch((err) => setPeremptionErreur(err.message))
+      .finally(() => setPeremptionChargement(false));
+  }
+
+  useEffect(() => {
+    if (ongletActif === 'peremption') chargerPeremption();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ongletActif, peremptionJours]);
 
   function chargerJournal() {
     setJournalChargement(true);
@@ -603,6 +623,44 @@ export default function Etats() {
             ))}
           </div>
         </>
+      ) : ongletActif === 'peremption' ? (
+        <>
+          <div style={styles.filtres}>
+            <label style={styles.champLabel}>
+              Alerter dans les
+              <select style={styles.champInput} value={peremptionJours} onChange={(e) => setPeremptionJours(e.target.value)}>
+                <option value="30">30 jours</option>
+                <option value="60">60 jours</option>
+                <option value="90">90 jours</option>
+              </select>
+            </label>
+          </div>
+
+          {peremptionErreur && <div style={styles.bandeauErreur}>{peremptionErreur}</div>}
+          {peremptionChargement && <p style={styles.texteMuet}>Chargement…</p>}
+          {!peremptionChargement && peremption.length === 0 && (
+            <p style={styles.texteMuet}>Aucun lot avec une date de péremption approchante.</p>
+          )}
+
+          <div style={styles.tableauWrapper}>
+            {peremption.map((l) => (
+              <div key={l.ligneReceptionId} style={styles.carteAttente}>
+                <div style={styles.enTeteCarteAttente}>
+                  <span style={{ fontWeight: 700 }}>{l.designation}</span>
+                  <span style={l.expire ? styles.badgeAlerteRouge : styles.texteMuet}>
+                    {l.expire
+                      ? `Expiré depuis ${Math.abs(l.joursRestants)} jour(s)`
+                      : `Dans ${l.joursRestants} jour(s)`}
+                  </span>
+                </div>
+                <div style={styles.texteMuet}>
+                  {l.reference} — Quantité : {l.quantite} — {l.lieu || 'Lieu inconnu'} — Péremption le{' '}
+                  {new Date(l.datePeremption).toLocaleDateString('fr-FR')}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       ) : ongletActif === 'journal' ? (
         <>
           {journalErreur && <div style={styles.bandeauErreur}>{journalErreur}</div>}
@@ -756,4 +814,6 @@ const styles = {
   boutonReprendre: { padding: '6px 12px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 13 },
   boutonRetirer: { border: 'none', background: 'transparent', color: 'var(--error)', cursor: 'pointer', fontSize: 12, fontWeight: 600 },
   formDefinitionCadeau: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 },
+  filtres: { display: 'flex', gap: 12, marginBottom: 16 },
+  badgeAlerteRouge: { color: 'var(--error)', fontWeight: 700, fontSize: 13 },
 };

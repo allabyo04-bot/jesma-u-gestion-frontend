@@ -72,6 +72,30 @@ export async function recupererHtmlAvecAuth(chemin) {
   return texte;
 }
 
+// Comme recupererHtmlAvecAuth, mais envoie des données en POST (ex: la liste précise
+// des étiquettes à imprimer avec leur quantité) et récupère le HTML en retour.
+export async function envoyerEtRecupererHtmlAvecAuth(chemin, corps) {
+  const headers = { 'Content-Type': 'application/json' };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const reponse = await fetch(`${BASE_URL}${chemin}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(corps),
+  });
+  const texte = await reponse.text();
+  if (!reponse.ok) {
+    let message = 'Impossible de récupérer les étiquettes.';
+    try {
+      const data = JSON.parse(texte);
+      if (data && data.error) message = data.error;
+    } catch { /* réponse non JSON, on garde le message générique */ }
+    throw new Error(message);
+  }
+  return texte;
+}
+
 // Télécharge un fichier protégé par connexion (ex: export CSV) — impossible via un lien
 // classique car le token ne serait pas transmis. Déclenche le téléchargement directement
 // dans le navigateur, avec le nom de fichier fourni.
