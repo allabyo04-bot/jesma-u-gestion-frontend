@@ -177,6 +177,12 @@ export default function Ventes() {
   const [erreurRetour, setErreurRetour] = useState('');
   const [avoirCree, setAvoirCree] = useState(null);
 
+  // --- Avoirs (liste) ---
+  const [avoirsListe, setAvoirsListe] = useState([]);
+  const [avoirsChargement, setAvoirsChargement] = useState(false);
+  const [avoirsErreur, setAvoirsErreur] = useState('');
+  const [avoirsFiltre, setAvoirsFiltre] = useState('ACTIF');
+
   // --- Historique + demandes d'annulation ---
   const [historiqueVentes, setHistoriqueVentes] = useState([]);
   const [historiqueChargement, setHistoriqueChargement] = useState(false);
@@ -246,6 +252,26 @@ export default function Ventes() {
       chargerCredits();
     }
   }, [ongletActif, creditFiltre]);
+
+  async function chargerAvoirs() {
+    setAvoirsChargement(true);
+    setAvoirsErreur('');
+    try {
+      const suffixe = avoirsFiltre !== 'TOUS' ? `?statut=${avoirsFiltre}` : '';
+      const donnees = await appelApi('GET', `/avoirs${suffixe}`);
+      setAvoirsListe(donnees);
+    } catch (err) {
+      setAvoirsErreur(err.message);
+    } finally {
+      setAvoirsChargement(false);
+    }
+  }
+
+  useEffect(() => {
+    if (ongletActif === 'avoirs') {
+      chargerAvoirs();
+    }
+  }, [ongletActif, avoirsFiltre]);
 
   function ouvrirFormulaireReglement(vente) {
     setVenteReglementOuvert(vente.id);
@@ -1101,6 +1127,70 @@ export default function Ventes() {
                 </div>
               </>
             )}
+          </>
+        ) : ongletActif === 'avoirs' ? (
+          <>
+            <h2 style={styles.titreOnglet}>Avoirs</h2>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[
+                { id: 'ACTIF', label: 'Actifs' },
+                { id: 'UTILISE', label: 'Utilisés' },
+                { id: 'TOUS', label: 'Tous' },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setAvoirsFiltre(f.id)}
+                  style={f.id === avoirsFiltre ? styles.filtreActif : styles.filtreInactif}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {avoirsErreur && <div style={styles.bandeauErreur}>{avoirsErreur}</div>}
+            {avoirsChargement && <p style={styles.texteMuet}>Chargement…</p>}
+            {!avoirsChargement && avoirsListe.length === 0 && (
+              <p style={styles.texteMuet}>Aucun avoir pour ce filtre.</p>
+            )}
+
+            <div style={styles.listeAttente}>
+              {avoirsListe.map((avoir) => (
+                <div key={avoir.id} style={styles.carteAttente}>
+                  <div style={styles.enTeteCarteAttente}>
+                    <span style={{ fontWeight: 700 }}>
+                      {avoir.reference} — {Number(avoir.montant).toLocaleString('fr-FR')} F
+                    </span>
+                    <span style={styles.texteMuet}>
+                      {new Date(avoir.createdAt).toLocaleDateString('fr-FR')}
+                    </span>
+                  </div>
+                  <div style={styles.texteMuet}>
+                    Client : {avoir.venteOrigine?.client ? avoir.venteOrigine.client.nomComplet : 'Non renseigné'}
+                    {' — '}Vente d'origine {avoir.venteOrigine?.numero || avoir.venteOrigineId}
+                  </div>
+                  {avoir.lignes && avoir.lignes.length > 0 && (
+                    <div style={styles.texteMuet}>
+                      {avoir.lignes.map((l) => `${l.article?.designation || ''} ×${l.quantite}`).join(', ')}
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      ...styles.ligneRecap,
+                      fontWeight: 700,
+                      color: avoir.statut === 'ACTIF' ? '#1E6B36' : 'var(--brown-soft)',
+                    }}
+                  >
+                    <span>{avoir.statut === 'ACTIF' ? 'Actif' : 'Utilisé'}</span>
+                    <span>
+                      {avoir.statut === 'UTILISE' && avoir.dateUtilisation
+                        ? `le ${new Date(avoir.dateUtilisation).toLocaleDateString('fr-FR')}`
+                        : ''}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </>
         ) : ongletActif !== 'nouvelle' ? (
           <p style={styles.texteMuet}>Cet écran arrive dans une prochaine session.</p>
