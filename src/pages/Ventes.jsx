@@ -9,8 +9,6 @@ const ONGLETS = [
   { id: 'credit', label: 'Ventes à crédit' },
   { id: 'historique', label: 'Historique' },
   { id: 'retours', label: 'Retours-Échanges' },
-  { id: 'cartes', label: 'Cartes cadeaux' },
-  { id: 'listes', label: 'Listes cadeaux' },
   { id: 'avoirs', label: 'Avoirs' },
 ];
 
