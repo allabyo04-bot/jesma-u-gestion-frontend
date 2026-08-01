@@ -14,7 +14,7 @@ const ONGLETS = [
 
 const MODES_PAIEMENT = [
   'Espèces', 'Moov Money', 'MTN Money', 'Orange Money',
-  'Wave', 'Carte bancaire', 'Bon d\'achat', 'Avoir',
+  'Wave', 'Carte bancaire', 'Avoir',
 ];
 
 const CLE_STOCKAGE_ATTENTE = 'jesma_ventes_attente';
@@ -31,7 +31,7 @@ function chargerVentesEnAttente() {
 // ------------------------------------------------------------
 // TICKET DE CAISSE
 // ------------------------------------------------------------
-function construireTicketHtml({ vente, panier, remise, totalNet, paiements, contributionAvoir, avoirReference, lieuNom, vendeurNom, estCredit, montantRestant }) {
+function construireTicketHtml({ vente, panier, remise, totalNet, paiements, contributionAvoir, avoirReference, contributionCarteCadeau, carteCadeauCode, lieuNom, vendeurNom, estCredit, montantRestant }) {
   const date = new Date(vente.createdAt || Date.now());
   const dateTexte = date.toLocaleDateString('fr-FR');
   const heureTexte = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
@@ -93,6 +93,7 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   <hr>
   ${paiementsHtml}
   ${contributionAvoir > 0 ? `<div class="ligne-total"><span>Avoir ${avoirReference || ''}</span><span>−${contributionAvoir.toLocaleString('fr-FR')} F</span></div>` : ''}
+  ${contributionCarteCadeau > 0 ? `<div class="ligne-total"><span>Carte cadeau ${carteCadeauCode || ''}</span><span>−${contributionCarteCadeau.toLocaleString('fr-FR')} F</span></div>` : ''}
   ${estCredit && montantRestant > 1 ? `<div class="ligne-total"><span>Reste dû (crédit)</span><span>${montantRestant.toLocaleString('fr-FR')} F</span></div>` : ''}
   <hr>
   <div class="pied">Merci de votre visite !</div>
@@ -147,6 +148,12 @@ export default function Ventes() {
   const [avoirVerifie, setAvoirVerifie] = useState(null);
   const [avoirVerificationEnCours, setAvoirVerificationEnCours] = useState(false);
   const [erreurAvoir, setErreurAvoir] = useState('');
+
+  // --- Carte cadeau utilisée en paiement sur la nouvelle vente ---
+  const [codeCarteCadeau, setCodeCarteCadeau] = useState('');
+  const [carteCadeauVerifiee, setCarteCadeauVerifiee] = useState(null);
+  const [carteCadeauVerificationEnCours, setCarteCadeauVerificationEnCours] = useState(false);
+  const [erreurCarteCadeau, setErreurCarteCadeau] = useState('');
 
   const [venteEnCours, setVenteEnCours] = useState(false);
   const [erreurVente, setErreurVente] = useState('');
@@ -328,6 +335,36 @@ export default function Ventes() {
     setCodeAvoir('');
     setAvoirVerifie(null);
     setErreurAvoir('');
+  }
+
+  async function verifierCarteCadeau() {
+    const code = codeCarteCadeau.trim();
+    if (!code) return;
+    setErreurCarteCadeau('');
+    setCarteCadeauVerificationEnCours(true);
+    try {
+      const carte = await appelApi('GET', `/cartes-cadeaux/${encodeURIComponent(code)}`);
+      if (carte.statut === 'UTILISEE') {
+        setErreurCarteCadeau('Cette carte est déjà utilisée — il faut la réactiver dans Cartes cadeaux avant de pouvoir la réutiliser.');
+        setCarteCadeauVerifiee(null);
+      } else if (carte.statut !== 'ACTIVE') {
+        setErreurCarteCadeau("Cette carte n'est pas encore activée.");
+        setCarteCadeauVerifiee(null);
+      } else {
+        setCarteCadeauVerifiee(carte);
+      }
+    } catch (err) {
+      setErreurCarteCadeau(err.message);
+      setCarteCadeauVerifiee(null);
+    } finally {
+      setCarteCadeauVerificationEnCours(false);
+    }
+  }
+
+  function retirerCarteCadeau() {
+    setCodeCarteCadeau('');
+    setCarteCadeauVerifiee(null);
+    setErreurCarteCadeau('');
   }
 
   async function gererRechercheRetour(e) {
@@ -573,6 +610,7 @@ export default function Ventes() {
     setMontantAAjouter('');
     setTypeVente('Comptant');
     retirerAvoir();
+    retirerCarteCadeau();
   }
 
   // Le client se désiste avant paiement : on vide le panier en cours sans rien
@@ -592,7 +630,10 @@ export default function Ventes() {
   const totalNet = totalBrut - remise;
   const totalPaiements = paiements.reduce((s, p) => s + p.montant, 0);
   const contributionAvoir = avoirVerifie ? Math.min(Number(avoirVerifie.montant), totalNet) : 0;
-  const resteAPayer = totalNet - totalPaiements - contributionAvoir;
+  const contributionCarteCadeau = carteCadeauVerifiee
+    ? Math.min(Number(carteCadeauVerifiee.denomination), totalNet - contributionAvoir)
+    : 0;
+  const resteAPayer = totalNet - totalPaiements - contributionAvoir - contributionCarteCadeau;
   const estCredit = typeVente === 'Crédit';
 
   useEffect(() => {
@@ -674,7 +715,7 @@ export default function Ventes() {
       setErreurVente('Sélectionnez un vendeur.');
       return;
     }
-    if (!estCredit && paiements.length === 0 && contributionAvoir === 0) {
+    if (!estCredit && paiements.length === 0 && contributionAvoir === 0 && contributionCarteCadeau === 0) {
       setErreurVente('Ajoutez au moins un mode de paiement.');
       return;
     }
@@ -709,6 +750,7 @@ export default function Ventes() {
         remiseMontant: remise > 0 ? remise : undefined,
         motifRemise: motifRemise || undefined,
         avoirCode: avoirVerifie ? avoirVerifie.reference : undefined,
+        carteCadeauCode: carteCadeauVerifiee ? carteCadeauVerifiee.codeBarre : undefined,
         lignes: panier.map((l) => ({
           articleId: l.articleId,
           quantite: l.quantite,
@@ -727,6 +769,8 @@ export default function Ventes() {
         paiements,
         contributionAvoir,
         avoirReference: avoirVerifie?.reference,
+        contributionCarteCadeau,
+        carteCadeauCode: carteCadeauVerifiee?.codeBarre,
         lieuNom,
         vendeurNom,
         estCredit,
@@ -1312,6 +1356,36 @@ export default function Ventes() {
                 </label>
                 {erreurAvoir && <p style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>{erreurAvoir}</p>}
               </div>
+
+              <div style={{ maxWidth: 340 }}>
+                <label style={styles.champLabel}>
+                  Carte cadeau (optionnel)
+                  {!carteCadeauVerifiee ? (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        style={styles.champInput}
+                        placeholder="Scanner ou saisir le code-barres"
+                        value={codeCarteCadeau}
+                        onChange={(e) => setCodeCarteCadeau(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); verifierCarteCadeau(); } }}
+                      />
+                      <button
+                        onClick={verifierCarteCadeau}
+                        disabled={carteCadeauVerificationEnCours || !codeCarteCadeau.trim()}
+                        style={styles.boutonAjouterPaiement}
+                      >
+                        {carteCadeauVerificationEnCours ? '…' : 'Vérifier'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ ...styles.lignePaiement, background: '#DFF3E3' }}>
+                      <span>Carte {carteCadeauVerifiee.codeBarre} — {Number(carteCadeauVerifiee.denomination).toLocaleString('fr-FR')} F</span>
+                      <button onClick={retirerCarteCadeau} style={styles.boutonRetirer}>✕</button>
+                    </div>
+                  )}
+                </label>
+                {erreurCarteCadeau && <p style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>{erreurCarteCadeau}</p>}
+              </div>
             </div>
 
             {confirmation && (
@@ -1459,6 +1533,13 @@ export default function Ventes() {
                   </div>
                 )}
 
+                {carteCadeauVerifiee && (
+                  <div style={styles.ligneRecap}>
+                    <span>Carte cadeau appliquée</span>
+                    <span>−{contributionCarteCadeau.toLocaleString('fr-FR')} F</span>
+                  </div>
+                )}
+
                 <div style={styles.ajoutPaiement}>
                   <select
                     style={styles.champInput}
@@ -1498,7 +1579,7 @@ export default function Ventes() {
                   <div style={styles.recapPaiement}>
                     <div style={styles.ligneRecap}>
                       <span>Total payé</span>
-                      <span>{(totalPaiements + contributionAvoir).toLocaleString('fr-FR')} F</span>
+                      <span>{(totalPaiements + contributionAvoir + contributionCarteCadeau).toLocaleString('fr-FR')} F</span>
                     </div>
                     <div
                       style={{
