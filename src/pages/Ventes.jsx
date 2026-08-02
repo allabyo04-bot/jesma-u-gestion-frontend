@@ -155,6 +155,12 @@ export default function Ventes() {
   const [carteCadeauVerificationEnCours, setCarteCadeauVerificationEnCours] = useState(false);
   const [erreurCarteCadeau, setErreurCarteCadeau] = useState('');
 
+  // --- Facture pro forma chargée pour reprendre directement une vente préparée ---
+  const [numeroProForma, setNumeroProForma] = useState('');
+  const [proFormaChargee, setProFormaChargee] = useState(null);
+  const [proFormaChargementEnCours, setProFormaChargementEnCours] = useState(false);
+  const [erreurProForma, setErreurProForma] = useState('');
+
   const [venteEnCours, setVenteEnCours] = useState(false);
   const [erreurVente, setErreurVente] = useState('');
   const [confirmation, setConfirmation] = useState(null);
@@ -365,6 +371,46 @@ export default function Ventes() {
     setCodeCarteCadeau('');
     setCarteCadeauVerifiee(null);
     setErreurCarteCadeau('');
+  }
+
+  async function chargerProForma() {
+    const numero = numeroProForma.trim();
+    if (!numero) return;
+    setErreurProForma('');
+    setProFormaChargementEnCours(true);
+    try {
+      const proForma = await appelApi('GET', `/proforma/${encodeURIComponent(numero)}`);
+      if (proForma.statut !== 'EN_ATTENTE') {
+        setErreurProForma(
+          proForma.statut === 'UTILISEE'
+            ? 'Cette facture pro forma a déjà été transformée en vente.'
+            : 'Cette facture pro forma a été annulée.'
+        );
+        return;
+      }
+      setPanier(
+        proForma.lignes.map((l) => ({
+          articleId: l.articleId,
+          designation: l.article.designation,
+          prixUnitaire: Number(l.prixUnitaire),
+          quantite: l.quantite,
+          stockDispo: l.article.stockActuel,
+          photoUrl: l.article.photoUrl || null,
+        }))
+      );
+      setClientId(String(proForma.clientId));
+      setProFormaChargee(proForma);
+    } catch (err) {
+      setErreurProForma(err.message);
+    } finally {
+      setProFormaChargementEnCours(false);
+    }
+  }
+
+  function retirerProForma() {
+    setNumeroProForma('');
+    setProFormaChargee(null);
+    setErreurProForma('');
   }
 
   async function gererRechercheRetour(e) {
@@ -611,6 +657,7 @@ export default function Ventes() {
     setTypeVente('Comptant');
     retirerAvoir();
     retirerCarteCadeau();
+    retirerProForma();
   }
 
   // Le client se désiste avant paiement : on vide le panier en cours sans rien
@@ -751,6 +798,7 @@ export default function Ventes() {
         motifRemise: motifRemise || undefined,
         avoirCode: avoirVerifie ? avoirVerifie.reference : undefined,
         carteCadeauCode: carteCadeauVerifiee ? carteCadeauVerifiee.codeBarre : undefined,
+        proFormaId: proFormaChargee ? proFormaChargee.id : undefined,
         lignes: panier.map((l) => ({
           articleId: l.articleId,
           quantite: l.quantite,
@@ -1385,6 +1433,35 @@ export default function Ventes() {
                   )}
                 </label>
                 {erreurCarteCadeau && <p style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>{erreurCarteCadeau}</p>}
+              </div>
+
+              <div style={{ maxWidth: 340 }}>
+                <label style={styles.champLabel}>
+                  Charger une facture pro forma (optionnel)
+                  {!proFormaChargee ? (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        style={styles.champInput}
+                        placeholder="Ex: PF-1234567890"
+                        value={numeroProForma}
+                        onChange={(e) => setNumeroProForma(e.target.value)}
+                      />
+                      <button
+                        onClick={chargerProForma}
+                        disabled={proFormaChargementEnCours || !numeroProForma.trim()}
+                        style={styles.boutonAjouterPaiement}
+                      >
+                        {proFormaChargementEnCours ? '…' : 'Charger'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ ...styles.lignePaiement, background: '#DFF3E3' }}>
+                      <span>Pro forma {proFormaChargee.numero} chargée ({proFormaChargee.lignes.length} article(s))</span>
+                      <button onClick={retirerProForma} style={styles.boutonRetirer}>✕</button>
+                    </div>
+                  )}
+                </label>
+                {erreurProForma && <p style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>{erreurProForma}</p>}
               </div>
             </div>
 

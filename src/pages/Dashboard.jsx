@@ -11,6 +11,7 @@ const LIENS = [
   { id: 'cartes-cadeaux', label: 'Cartes cadeaux', chemin: '/cartes-cadeaux', adminSeulement: false },
   { id: 'depenses', label: 'Dépenses', chemin: '/depenses', adminSeulement: false },
   { id: 'listes-cadeaux', label: 'Listes cadeaux', chemin: '/listes-cadeaux', adminSeulement: false },
+  { id: 'proforma', label: 'Factures pro forma', chemin: '/proforma', adminSeulement: false },
   { id: 'utilisateurs', label: 'Utilisateurs', chemin: '/utilisateurs', adminSeulement: true },
   { id: 'roles', label: 'Rôles', chemin: '/roles', adminSeulement: true },
   { id: 'parametres', label: 'Paramètres', chemin: '/parametres', adminSeulement: true },
