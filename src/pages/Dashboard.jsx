@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { appelApi, clearSession, getUtilisateur } from '../lib/api';
+import BandeauPhotosProduits from '../components/BandeauPhotosProduits';
 
 const LIENS = [
   { id: 'ventes', label: 'Ventes', chemin: '/ventes', adminSeulement: false },
@@ -23,11 +24,13 @@ export default function Dashboard() {
   const estAdmin = utilisateur?.role === 'ADMIN';
   const [dashboard, setDashboard] = useState(null);
   const [erreur, setErreur] = useState('');
+  const [articles, setArticles] = useState([]);
 
   useEffect(() => {
     appelApi('GET', '/dashboard')
       .then(setDashboard)
       .catch((err) => setErreur(err.message));
+    appelApi('GET', '/articles').then(setArticles).catch(() => {});
   }, []);
 
   function deconnexion() {
@@ -57,6 +60,8 @@ export default function Dashboard() {
 
       <main style={styles.contenu}>
         <h1 style={styles.titre}>Bonjour, {utilisateur?.nomComplet || 'Victoria'} 👋</h1>
+
+        <BandeauPhotosProduits articles={articles} hauteur={110} />
 
         {erreur && <p style={{ color: '#B23A2E' }}>{erreur}</p>}
 
