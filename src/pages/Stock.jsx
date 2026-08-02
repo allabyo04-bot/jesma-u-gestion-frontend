@@ -971,6 +971,7 @@ function OngletEtatStock({ lieux, familles }) {
   const [chargement, setChargement] = useState(false);
   const [familleId, setFamilleId] = useState('');
   const [sousFamilleId, setSousFamilleId] = useState('');
+  const [statutStock, setStatutStock] = useState('TOUS');
 
   useEffect(() => {
     if (!lieuId) {
@@ -990,6 +991,8 @@ function OngletEtatStock({ lieux, familles }) {
   const stocksFiltres = stocks.filter((s) => {
     if (familleId && s.article.familleId !== Number(familleId)) return false;
     if (sousFamilleId && s.article.sousFamilleId !== Number(sousFamilleId)) return false;
+    if (statutStock === 'RUPTURE' && s.quantite > 0) return false;
+    if (statutStock === 'EN_STOCK' && s.quantite <= 0) return false;
     return true;
   });
 
@@ -1029,6 +1032,14 @@ function OngletEtatStock({ lieux, familles }) {
             </select>
           </label>
         )}
+        <label style={styles.champLabel}>
+          Statut
+          <select style={styles.champInput} value={statutStock} onChange={(e) => setStatutStock(e.target.value)}>
+            <option value="TOUS">Tous les articles</option>
+            <option value="EN_STOCK">En stock uniquement</option>
+            <option value="RUPTURE">Rupture (quantité 0) uniquement</option>
+          </select>
+        </label>
       </div>
 
       {chargement && <p style={styles.texteMuet}>Chargement…</p>}
@@ -1091,6 +1102,7 @@ function OngletEtatGlobal({ lieux, articles, familles }) {
   const [lignesParArticle, setLignesParArticle] = useState({});
   const [familleId, setFamilleId] = useState('');
   const [sousFamilleId, setSousFamilleId] = useState('');
+  const [statutStock, setStatutStock] = useState('TOUS');
 
   useEffect(() => {
     if (lieux.length === 0) return;
@@ -1117,6 +1129,9 @@ function OngletEtatGlobal({ lieux, articles, familles }) {
   const articlesFiltres = articles.filter((a) => {
     if (familleId && a.familleId !== Number(familleId)) return false;
     if (sousFamilleId && a.sousFamilleId !== Number(sousFamilleId)) return false;
+    const total = lieux.reduce((s, l) => s + ((lignesParArticle[a.id] || {})[l.id] || 0), 0);
+    if (statutStock === 'RUPTURE' && total > 0) return false;
+    if (statutStock === 'EN_STOCK' && total <= 0) return false;
     return true;
   });
 
@@ -1149,6 +1164,14 @@ function OngletEtatGlobal({ lieux, articles, familles }) {
             </select>
           </label>
         )}
+        <label style={styles.champLabel}>
+          Statut
+          <select style={styles.champInput} value={statutStock} onChange={(e) => setStatutStock(e.target.value)}>
+            <option value="TOUS">Tous les articles</option>
+            <option value="EN_STOCK">En stock uniquement</option>
+            <option value="RUPTURE">Rupture (quantité 0) uniquement</option>
+          </select>
+        </label>
       </div>
 
       {chargement && <p style={styles.texteMuet}>Chargement…</p>}
