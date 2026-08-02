@@ -4,7 +4,7 @@ import { appelApiPublic } from '../lib/api';
 
 const MODES_PAIEMENT = [
   'Espèces', 'Moov Money', 'MTN Money', 'Orange Money',
-  'Wave', 'Carte bancaire',
+  'Wave', 'DJAMO', 'Carte bancaire',
 ];
 
 // Page publique consultée via le lien partagé (ex: WhatsApp, SMS). Aucune connexion requise.
@@ -23,10 +23,9 @@ export default function ListeCadeauPublique() {
       .finally(() => setChargement(false));
   }, [codeAcces]);
 
-  const [typePaiement, setTypePaiement] = useState('carte'); // 'carte' | 'autre'
-  const [carteCadeauCode, setCarteCadeauCode] = useState('');
   const [modePaiementChoisi, setModePaiementChoisi] = useState(MODES_PAIEMENT[0]);
   const [offrePar, setOffrePar] = useState('');
+  const [telephoneOffrePar, setTelephoneOffrePar] = useState('');
   const [quantitesChoisies, setQuantitesChoisies] = useState({});
   const [erreurOffre, setErreurOffre] = useState('');
   const [resultatOffre, setResultatOffre] = useState(null); // { statutConfirmation }
@@ -51,8 +50,8 @@ export default function ListeCadeauPublique() {
     setErreurOffre('');
     setResultatOffre(null);
 
-    if (typePaiement === 'carte' && !carteCadeauCode.trim()) {
-      setErreurOffre('Le code de votre carte cadeau est requis.');
+    if (!telephoneOffrePar.trim()) {
+      setErreurOffre('Votre téléphone est requis, pour que la boutique puisse vous contacter.');
       return;
     }
 
@@ -64,7 +63,7 @@ export default function ListeCadeauPublique() {
       setErreurOffre('Choisissez au moins un article à offrir.');
       return;
     }
-    if (typePaiement === 'autre' && montantCalcule <= 0) {
+    if (montantCalcule <= 0) {
       setErreurOffre('Choisissez au moins un article à offrir avant de payer.');
       return;
     }
@@ -72,16 +71,16 @@ export default function ListeCadeauPublique() {
     setEnvoiEnCours(true);
     try {
       const reponse = await appelApiPublic('POST', `/listes-cadeaux/publique/${codeAcces}/offrir`, {
-        carteCadeauCode: typePaiement === 'carte' ? carteCadeauCode.trim() : undefined,
-        modePaiement: typePaiement === 'autre' ? modePaiementChoisi : undefined,
-        montant: typePaiement === 'autre' ? montantCalcule : undefined,
+        modePaiement: modePaiementChoisi,
+        montant: montantCalcule,
         offrePar: offrePar || undefined,
+        telephoneOffrePar: telephoneOffrePar.trim(),
         lignes: lignesChoisies,
       });
       setResultatOffre(reponse);
       const misAJour = await appelApiPublic('GET', `/listes-cadeaux/publique/${codeAcces}`);
       setListe(misAJour);
-      setCarteCadeauCode('');
+      setTelephoneOffrePar('');
       setOffrePar('');
       setQuantitesChoisies({});
     } catch (err) {
@@ -107,10 +106,13 @@ export default function ListeCadeauPublique() {
   return (
     <div style={styles.page}>
       <header style={styles.entete}>
-        <div style={styles.logoRond}>U</div>
+        <img src="/logo-jesma-u.png" alt="Jesma U" style={styles.logoImage} onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+        <div style={{ ...styles.logoRond, display: 'none' }}>U</div>
         <div>
           <h1 style={styles.titrePrincipal}>Jesma U</h1>
-          <p style={styles.sousTitre}>Liste cadeau</p>
+          <p style={styles.sousTitre}>
+            Liste cadeau de {liste.nomDestinataire || liste.client.nomComplet}
+          </p>
         </div>
       </header>
 
@@ -162,7 +164,7 @@ export default function ListeCadeauPublique() {
         <div style={styles.blocOffrir}>
           <h3 style={styles.titreOffrir}>Vous souhaitez offrir un cadeau ?</h3>
           <p style={styles.texteMuet}>
-            Choisissez vos articles ci-dessus, puis payez avec une carte cadeau Jesma U ou un autre moyen.
+            Choisissez vos articles ci-dessus, puis réglez par le moyen de paiement de votre choix.
           </p>
 
           {resultatOffre && resultatOffre.statutConfirmation === 'CONFIRME' && (
@@ -178,47 +180,26 @@ export default function ListeCadeauPublique() {
           )}
           {erreurOffre && <div style={styles.bandeauErreur}>{erreurOffre}</div>}
 
-          <div style={styles.togglePaiement}>
-            <button
-              type="button"
-              onClick={() => setTypePaiement('carte')}
-              style={typePaiement === 'carte' ? styles.toggleActif : styles.toggle}
-            >
-              Carte cadeau
-            </button>
-            <button
-              type="button"
-              onClick={() => setTypePaiement('autre')}
-              style={typePaiement === 'autre' ? styles.toggleActif : styles.toggle}
-            >
-              Autre moyen de paiement
-            </button>
-          </div>
-
           <form onSubmit={offrir} style={styles.formOffrir}>
-            {typePaiement === 'carte' ? (
-              <input
-                style={styles.champInput}
-                value={carteCadeauCode}
-                onChange={(e) => setCarteCadeauCode(e.target.value)}
-                placeholder="Code de votre carte cadeau"
-              />
-            ) : (
-              <>
-                <select style={styles.champInput} value={modePaiementChoisi} onChange={(e) => setModePaiementChoisi(e.target.value)}>
-                  {MODES_PAIEMENT.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-                <div style={styles.montantCalcule}>
-                  Montant à envoyer : <strong>{montantCalcule.toLocaleString('fr-FR')} F</strong>
-                </div>
-                <p style={styles.texteAide}>
-                  Envoyez ce montant au +225 07 69 535 786, puis cliquez sur "Offrir ce cadeau".
-                  La boutique vérifiera la réception avant de confirmer votre don.
-                </p>
-              </>
-            )}
+            <select style={styles.champInput} value={modePaiementChoisi} onChange={(e) => setModePaiementChoisi(e.target.value)}>
+              {MODES_PAIEMENT.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <div style={styles.montantCalcule}>
+              Montant à envoyer : <strong>{montantCalcule.toLocaleString('fr-FR')} F</strong>
+            </div>
+            <p style={styles.texteAide}>
+              Envoyez ce montant au +225 07 69 535 786, puis cliquez sur "Offrir ce cadeau".
+              La boutique vérifiera la réception avant de confirmer votre don.
+            </p>
+            <input
+              style={styles.champInput}
+              value={telephoneOffrePar}
+              onChange={(e) => setTelephoneOffrePar(e.target.value)}
+              placeholder="Votre téléphone (requis, pour vous contacter) *"
+              required
+            />
             <input
               style={styles.champInput}
               value={offrePar}
@@ -240,8 +221,9 @@ const styles = {
   pageErreur: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--cream)', fontFamily: 'var(--font-body)', textAlign: 'center', padding: 40 },
   titreErreur: { fontFamily: 'var(--font-display)', color: 'var(--brown-ink)' },
   page: { minHeight: '100vh', background: 'var(--cream)', fontFamily: 'var(--font-body)', color: 'var(--brown-ink)' },
-  entete: { display: 'flex', alignItems: 'center', gap: 16, padding: '24px 20px', background: 'var(--brown-deep)', color: 'var(--cream)' },
-  logoRond: { width: 48, height: 48, borderRadius: '50%', background: 'var(--gold-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--white)', flexShrink: 0 },
+  entete: { display: 'flex', alignItems: 'center', gap: 16, padding: '24px 20px', background: 'var(--gold-deep)', color: 'var(--brown-ink)' },
+  logoImage: { width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 },
+  logoRond: { width: 48, height: 48, borderRadius: '50%', background: 'var(--brown-deep)', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--white)', flexShrink: 0 },
   titrePrincipal: { fontFamily: 'var(--font-display)', margin: 0, fontSize: 22 },
   sousTitre: { margin: 0, fontSize: 13, opacity: 0.85 },
   contenu: { maxWidth: 640, margin: '0 auto', padding: '24px 20px' },

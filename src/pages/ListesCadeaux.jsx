@@ -789,7 +789,13 @@ function OngletOffresEnAttente() {
             </div>
 
             {offre.offrePar && (
-              <div style={styles.texteMuet}>Offert par : {offre.offrePar}</div>
+              <div style={styles.texteMuet}>
+                Offert par : {offre.offrePar}
+                {offre.telephoneOffrePar && ` — ${offre.telephoneOffrePar}`}
+              </div>
+            )}
+            {!offre.offrePar && offre.telephoneOffrePar && (
+              <div style={styles.texteMuet}>Contact donateur : {offre.telephoneOffrePar}</div>
             )}
 
             <div style={styles.listeLignes}>
