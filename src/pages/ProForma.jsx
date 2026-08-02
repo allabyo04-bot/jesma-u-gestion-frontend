@@ -123,6 +123,11 @@ function FormulaireProForma({ onFermer, onCree }) {
   const [clients, setClients] = useState([]);
   const [clientId, setClientId] = useState('');
   const [clientSearch, setClientSearch] = useState('');
+  const [creationClientOuverte, setCreationClientOuverte] = useState(false);
+  const [nomNouveauClient, setNomNouveauClient] = useState('');
+  const [telephoneNouveauClient, setTelephoneNouveauClient] = useState('');
+  const [erreurNouveauClient, setErreurNouveauClient] = useState('');
+  const [creationClientEnCours, setCreationClientEnCours] = useState(false);
   const [articles, setArticles] = useState([]);
   const [recherche, setRecherche] = useState('');
   const [lignes, setLignes] = useState([]);
@@ -151,6 +156,35 @@ function FormulaireProForma({ onFermer, onCree }) {
 
   function retirerLigne(articleId) {
     setLignes((prec) => prec.filter((l) => l.articleId !== articleId));
+  }
+
+  async function creerClientRapide() {
+    setErreurNouveauClient('');
+    if (!nomNouveauClient.trim()) {
+      setErreurNouveauClient('Le nom complet est requis.');
+      return;
+    }
+    if (!telephoneNouveauClient.trim()) {
+      setErreurNouveauClient('Le téléphone est requis.');
+      return;
+    }
+    setCreationClientEnCours(true);
+    try {
+      const client = await appelApi('POST', '/clients', {
+        nomComplet: nomNouveauClient.trim(),
+        telephone: telephoneNouveauClient.trim(),
+      });
+      setClients((prec) => [...prec, client]);
+      setClientId(String(client.id));
+      setClientSearch('');
+      setCreationClientOuverte(false);
+      setNomNouveauClient('');
+      setTelephoneNouveauClient('');
+    } catch (err) {
+      setErreurNouveauClient(err.message);
+    } finally {
+      setCreationClientEnCours(false);
+    }
   }
 
   const total = lignes.reduce((s, l) => s + l.prixUnitaire * l.quantite, 0);
@@ -224,9 +258,44 @@ function FormulaireProForma({ onFermer, onCree }) {
                         {c.nomComplet}{c.telephone ? ` — ${c.telephone}` : ''}
                       </button>
                     ))}
+                  {clients.filter((c) => c.nomComplet.toLowerCase().includes(clientSearch.toLowerCase()) || (c.telephone || '').includes(clientSearch)).length === 0 && (
+                    <div style={{ padding: '8px 10px', fontSize: 13 }}>
+                      Aucun client trouvé.
+                      <button
+                        type="button"
+                        onClick={() => { setCreationClientOuverte(true); setNomNouveauClient(clientSearch); }}
+                        style={{ ...styles.boutonSecondaire, marginLeft: 8 }}
+                      >
+                        + Créer
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </>
+          )}
+          {creationClientOuverte && (
+            <div style={{ background: 'var(--cream)', borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+              <input
+                style={styles.champInput}
+                placeholder="Nom complet *"
+                value={nomNouveauClient}
+                onChange={(e) => setNomNouveauClient(e.target.value)}
+              />
+              <input
+                style={styles.champInput}
+                placeholder="Téléphone *"
+                value={telephoneNouveauClient}
+                onChange={(e) => setTelephoneNouveauClient(e.target.value)}
+              />
+              {erreurNouveauClient && <p style={{ color: 'var(--error)', fontSize: 12 }}>{erreurNouveauClient}</p>}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button type="button" onClick={() => setCreationClientOuverte(false)} style={styles.boutonAnnuler}>Annuler</button>
+                <button type="button" onClick={creerClientRapide} disabled={creationClientEnCours} style={styles.boutonValider}>
+                  {creationClientEnCours ? '…' : 'Créer et sélectionner'}
+                </button>
+              </div>
+            </div>
           )}
         </label>
 

@@ -26,6 +26,32 @@ function genererReferenceTransfert() {
   return `TR-${Date.now()}`;
 }
 
+function imprimerTableau(titre, colonnes, lignes) {
+  const enTetes = colonnes.map((c) => `<th>${c}</th>`).join('');
+  const corps = lignes
+    .map((ligne) => `<tr>${ligne.map((cellule) => `<td>${cellule}</td>`).join('')}</tr>`)
+    .join('');
+  const html = `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><title>${titre}</title>
+<style>
+  @page { size: A4; margin: 14mm; }
+  body { font-family: Arial, sans-serif; color: #2E1A0D; }
+  h1 { font-size: 18px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid #E5D9C3; font-size: 12px; text-align: left; }
+  th { background: #F7EFDD; }
+</style></head>
+<body>
+  <h1>Jesma U — ${titre}</h1>
+  <p style="font-size:12px;color:#7A5C3E">${new Date().toLocaleDateString('fr-FR')}</p>
+  <table><thead><tr>${enTetes}</tr></thead><tbody>${corps}</tbody></table>
+  <script>window.onload = () => window.print();</script>
+</body></html>`;
+  const fenetre = window.open('', '_blank');
+  fenetre.document.write(html);
+  fenetre.document.close();
+}
+
 export default function Stock() {
   const navigate = useNavigate();
   const [ongletActif, setOngletActif] = useState('reception');
@@ -1011,6 +1037,19 @@ function OngletEtatStock({ lieux, familles }) {
       )}
 
       {!chargement && stocksFiltres.length > 0 && (
+        <button
+          style={{ ...styles.boutonValiderPetit, marginBottom: 10 }}
+          onClick={() => imprimerTableau(
+            `État du stock — ${lieux.find((l) => String(l.id) === String(lieuId))?.nom || ''}`,
+            ['Article', 'Référence', 'Quantité'],
+            stocksFiltres.map((s) => [s.article.designation, s.article.reference, s.quantite])
+          )}
+        >
+          🖨️ Imprimer
+        </button>
+      )}
+
+      {!chargement && stocksFiltres.length > 0 && (
         <div style={styles.tableauScroll}>
           <table style={styles.tableau}>
             <thead>
@@ -1115,6 +1154,23 @@ function OngletEtatGlobal({ lieux, articles, familles }) {
       {chargement && <p style={styles.texteMuet}>Chargement…</p>}
       {!chargement && articlesFiltres.length === 0 && (
         <p style={styles.texteMuet}>Aucun article pour ce filtre.</p>
+      )}
+
+      {!chargement && articlesFiltres.length > 0 && (
+        <button
+          style={{ ...styles.boutonValiderPetit, marginBottom: 10 }}
+          onClick={() => imprimerTableau(
+            'État du stock — tous dépôts',
+            ['Article', 'Référence', ...lieux.map((l) => l.nom), 'Total'],
+            articlesFiltres.map((a) => {
+              const quantitesParLieu = lignesParArticle[a.id] || {};
+              const total = lieux.reduce((s, l) => s + (quantitesParLieu[l.id] || 0), 0);
+              return [a.designation, a.reference, ...lieux.map((l) => quantitesParLieu[l.id] || 0), total];
+            })
+          )}
+        >
+          🖨️ Imprimer
+        </button>
       )}
 
       {!chargement && articlesFiltres.length > 0 && (
