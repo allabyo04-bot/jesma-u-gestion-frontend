@@ -14,7 +14,7 @@ const ONGLETS = [
 
 const MODES_PAIEMENT = [
   'Espèces', 'Moov Money', 'MTN Money', 'Orange Money',
-  'Wave', 'Carte bancaire', 'Avoir',
+  'Wave', 'DJAMO', 'Carte bancaire', 'Avoir',
 ];
 
 const CLE_STOCKAGE_ATTENTE = 'jesma_ventes_attente';
