@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { appelApi, getUtilisateur } from '../lib/api';
 import { diffuserEtatPanier, diffuserVenteValidee, ecouterCanal } from '../lib/broadcast';
@@ -121,6 +121,8 @@ export default function Ventes() {
   const [ongletActif, setOngletActif] = useState('nouvelle');
 
   const [panier, setPanier] = useState([]);
+  const [filtrePanier, setFiltrePanier] = useState('');
+  const finPanierRef = useRef(null);
   const [recherche, setRecherche] = useState('');
   const [resultats, setResultats] = useState([]);
   const [erreurRecherche, setErreurRecherche] = useState('');
@@ -210,6 +212,15 @@ export default function Ventes() {
     appelApi('GET', '/clients').then(setClients).catch(() => {});
     setVentesEnAttente(chargerVentesEnAttente());
   }, []);
+
+  // Fait défiler automatiquement le panier jusqu'au dernier article ajouté/modifié —
+  // sans ça, une longue liste oblige à scroller à la main pour voir/ajuster la dernière
+  // ligne qu'on vient de scanner.
+  useEffect(() => {
+    if (finPanierRef.current) {
+      finPanierRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [panier.length]);
 
   // Si on arrive depuis la fiche d'un client fraîchement créé (?clientId=123), on le
   // présélectionne automatiquement dès que la liste des clients est chargée, puis on
@@ -648,6 +659,7 @@ export default function Ventes() {
 
   function reinitialiserVente() {
     setPanier([]);
+    setFiltrePanier('');
     setRemiseMontant('');
     setMotifRemise('');
     setClientId('');
@@ -788,8 +800,9 @@ export default function Ventes() {
     }
 
     setVenteEnCours(true);
+    let vente;
     try {
-      const vente = await appelApi('POST', '/ventes', {
+      vente = await appelApi('POST', '/ventes', {
         lieuId: Number(lieuId),
         vendeurId: vendeurId ? Number(vendeurId) : null,
         clientId: idClientFinal,
@@ -806,7 +819,20 @@ export default function Ventes() {
         })),
         paiements: paiements.map((p) => ({ mode: p.mode, montant: p.montant })),
       });
+    } catch (err) {
+      // Échec réel côté serveur (stock refusé, avoir invalide, etc.) — rien n'a été
+      // créé, donc on affiche l'erreur normalement et la caissière peut corriger/réessayer.
+      setErreurVente(err.message);
+      setVenteEnCours(false);
+      return;
+    }
 
+    // À partir d'ici, la vente est enregistrée en base et le stock déjà décompté —
+    // quoi qu'il arrive dans le bloc suivant (ticket, écran client), il ne faut plus
+    // jamais laisser croire à un échec qui pousserait à revalider (double décompte de
+    // stock). On vide donc TOUJOURS le panier, et on affiche un message dédié si
+    // uniquement l'affichage a un souci.
+    try {
       const lieuNom = lieux.find((l) => String(l.id) === String(lieuId))?.nom;
       const vendeurNom = vendeurs.find((v) => String(v.id) === String(vendeurId))?.nomComplet;
       const ticketHtml = construireTicketHtml({
@@ -826,13 +852,13 @@ export default function Ventes() {
       });
       setDernierTicketHtml(ticketHtml);
       imprimerTicketDepuisHtml(ticketHtml);
-
       setConfirmation({ ...vente, montantRestantAffiche: estCredit ? resteAPayer : 0 });
       diffuserVenteValidee(vente);
-      reinitialiserVente();
-    } catch (err) {
-      setErreurVente(err.message);
+    } catch {
+      setConfirmation({ ...vente, montantRestantAffiche: estCredit ? resteAPayer : 0 });
+      setErreurVente("La vente est bien enregistrée, mais le ticket ou l'écran client n'a pas pu s'afficher correctement.");
     } finally {
+      reinitialiserVente();
       setVenteEnCours(false);
     }
   }
@@ -1530,7 +1556,21 @@ export default function Ventes() {
               <div style={styles.colonnePanier}>
                 <h3 style={styles.titreBloc}>Panier</h3>
                 {panier.length === 0 && <p style={styles.texteMuet}>Aucun article ajouté.</p>}
-                {panier.map((ligne) => {
+                {panier.length > 4 && (
+                  <input
+                    style={{ ...styles.champInput, marginBottom: 8 }}
+                    placeholder="Retrouver un article du panier par nom…"
+                    value={filtrePanier}
+                    onChange={(e) => setFiltrePanier(e.target.value)}
+                  />
+                )}
+                {panier
+                  .filter((ligne) => {
+                    const f = filtrePanier.trim().toLowerCase();
+                    if (!f) return true;
+                    return ligne.designation.toLowerCase().includes(f);
+                  })
+                  .map((ligne) => {
                   const stockRestant = ligne.stockDispo != null ? ligne.stockDispo - ligne.quantite : null;
                   return (
                     <div key={ligne.articleId} style={styles.ligneAmpanier}>
@@ -1554,6 +1594,7 @@ export default function Ventes() {
                     </div>
                   );
                 })}
+                <div ref={finPanierRef} />
 
                 <div style={styles.blocRemise}>
                   <label style={styles.champLabel}>
