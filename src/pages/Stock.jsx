@@ -30,10 +30,12 @@ export default function Stock() {
   const [ongletActif, setOngletActif] = useState('reception');
   const [lieux, setLieux] = useState([]);
   const [articles, setArticles] = useState([]);
+  const [familles, setFamilles] = useState([]);
 
   useEffect(() => {
     appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
     appelApi('GET', '/articles').then(setArticles).catch(() => {});
+    appelApi('GET', '/familles').then(setFamilles).catch(() => {});
   }, []);
 
   return (
@@ -57,7 +59,15 @@ export default function Stock() {
         ))}
       </div>
 
-      {ongletActif === 'reception' && <OngletReception lieux={lieux} articles={articles} />}
+      {ongletActif === 'reception' && (
+        <OngletReception
+          lieux={lieux}
+          articles={articles}
+          familles={familles}
+          onFamillesMisesAJour={setFamilles}
+          onArticleCree={(nouvel) => setArticles((prec) => [...prec, nouvel])}
+        />
+      )}
       {ongletActif === 'import' && <OngletImportExcel lieux={lieux} />}
       {ongletActif === 'transferts' && <OngletTransferts lieux={lieux} articles={articles} />}
       {ongletActif === 'historique' && <OngletHistorique articles={articles} lieux={lieux} />}
@@ -70,7 +80,7 @@ export default function Stock() {
 // ------------------------------------------------------------
 // ONGLET RÉCEPTION (entrée initiale de marchandise)
 // ------------------------------------------------------------
-function OngletReception({ lieux, articles }) {
+function OngletReception({ lieux, articles, familles, onFamillesMisesAJour, onArticleCree }) {
   const [lieuId, setLieuId] = useState('');
   const [fournisseur, setFournisseur] = useState('');
   const [reference, setReference] = useState('');
@@ -85,6 +95,7 @@ function OngletReception({ lieux, articles }) {
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [receptions, setReceptions] = useState([]);
   const [chargementListe, setChargementListe] = useState(true);
+  const [formulaireArticleOuvert, setFormulaireArticleOuvert] = useState(false);
 
   // --- Scan / recherche rapide d'article (code-barre, référence ou nom) ---
   const [rechercheArticle, setRechercheArticle] = useState('');
@@ -305,12 +316,15 @@ function OngletReception({ lieux, articles }) {
         <div style={styles.ligneChamps}>
           <label style={{ ...styles.champLabel, flex: 1 }}>
             Article sélectionné
-            <select style={styles.champInput} value={articleAAjouter} onChange={(e) => gererChoixArticle(e.target.value)}>
-              <option value="">—</option>
-              {articles.map((a) => (
-                <option key={a.id} value={a.id}>{a.designation} ({a.reference})</option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <select style={{ ...styles.champInput, flex: 1 }} value={articleAAjouter} onChange={(e) => gererChoixArticle(e.target.value)}>
+                <option value="">—</option>
+                {articles.map((a) => (
+                  <option key={a.id} value={a.id}>{a.designation} ({a.reference})</option>
+                ))}
+              </select>
+              <button type="button" onClick={() => setFormulaireArticleOuvert(true)} style={styles.boutonPlus}>+</button>
+            </div>
           </label>
           <label style={styles.champLabel}>
             Qté
@@ -369,6 +383,20 @@ function OngletReception({ lieux, articles }) {
         <button onClick={validerReception} disabled={envoiEnCours} style={styles.boutonValider}>
           {envoiEnCours ? 'Enregistrement…' : 'Valider la réception'}
         </button>
+
+        {formulaireArticleOuvert && (
+          <FormulaireNouvelArticle
+            familles={familles}
+            onFamillesMisesAJour={onFamillesMisesAJour}
+            onFermer={() => setFormulaireArticleOuvert(false)}
+            onCree={(nouvel) => {
+              onArticleCree(nouvel);
+              setArticleAAjouter(String(nouvel.id));
+              setPrixAchatAAjouter(String(nouvel.prixAchat ?? ''));
+              setFormulaireArticleOuvert(false);
+            }}
+          />
+        )}
       </div>
 
       <div style={styles.carte}>
@@ -394,6 +422,235 @@ function OngletReception({ lieux, articles }) {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
+// FORMULAIRE DE CRÉATION RAPIDE D'ARTICLE (depuis l'écran Réception)
+// Même logique et mêmes endpoints que le formulaire de création dans Articles.jsx.
+// ------------------------------------------------------------
+function FormulaireNouvelArticle({ familles, onFamillesMisesAJour, onFermer, onCree }) {
+  const [designation, setDesignation] = useState('');
+  const [codeBarre, setCodeBarre] = useState('');
+  const [codeInterne, setCodeInterne] = useState('');
+  const [familleId, setFamilleId] = useState('');
+  const [sousFamilleId, setSousFamilleId] = useState('');
+  const [prixAchat, setPrixAchat] = useState('');
+  const [prixVente, setPrixVente] = useState('');
+  const [seuilAlerte, setSeuilAlerte] = useState('5');
+  const [erreur, setErreur] = useState('');
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
+
+  const [nouvelleFamilleOuverte, setNouvelleFamilleOuverte] = useState(false);
+  const [nomNouvelleFamille, setNomNouvelleFamille] = useState('');
+  const [nouvelleSousFamilleOuverte, setNouvelleSousFamilleOuverte] = useState(false);
+  const [nomNouvelleSousFamille, setNomNouvelleSousFamille] = useState('');
+  const [codeNouvelleSousFamille, setCodeNouvelleSousFamille] = useState('');
+  const [creationEnCours, setCreationEnCours] = useState(false);
+
+  const familleSelectionnee = familles.find((f) => f.id === Number(familleId));
+  const sousFamillesDisponibles = familleSelectionnee?.sousFamilles || [];
+
+  async function creerNouvelleFamille() {
+    if (!nomNouvelleFamille.trim()) return;
+    setCreationEnCours(true);
+    setErreur('');
+    try {
+      const nouvelle = await appelApi('POST', '/familles', { nom: nomNouvelleFamille.trim() });
+      const familleAvecSousFamilles = { ...nouvelle, sousFamilles: [] };
+      onFamillesMisesAJour([...familles, familleAvecSousFamilles]);
+      setFamilleId(String(nouvelle.id));
+      setSousFamilleId('');
+      setNomNouvelleFamille('');
+      setNouvelleFamilleOuverte(false);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setCreationEnCours(false);
+    }
+  }
+
+  async function creerNouvelleSousFamille() {
+    if (!nomNouvelleSousFamille.trim() || !codeNouvelleSousFamille.trim() || !familleId) return;
+    setCreationEnCours(true);
+    setErreur('');
+    try {
+      const nouvelle = await appelApi('POST', `/familles/${familleId}/sous-familles`, {
+        nom: nomNouvelleSousFamille.trim(),
+        codePrefixe: codeNouvelleSousFamille.trim(),
+      });
+      const misesAJour = familles.map((f) =>
+        f.id === Number(familleId) ? { ...f, sousFamilles: [...f.sousFamilles, nouvelle] } : f
+      );
+      onFamillesMisesAJour(misesAJour);
+      setSousFamilleId(String(nouvelle.id));
+      setNomNouvelleSousFamille('');
+      setCodeNouvelleSousFamille('');
+      setNouvelleSousFamilleOuverte(false);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setCreationEnCours(false);
+    }
+  }
+
+  async function gererSoumission(e) {
+    e.preventDefault();
+    setErreur('');
+
+    if (!designation || !familleId || !sousFamilleId || !prixVente) {
+      setErreur('Désignation, famille, sous-famille et prix de vente sont requis.');
+      return;
+    }
+
+    setEnvoiEnCours(true);
+    try {
+      const article = await appelApi('POST', '/articles', {
+        codeBarre: codeBarre.trim() || undefined,
+        codeInterne: codeInterne.trim() || undefined,
+        designation,
+        familleId,
+        sousFamilleId,
+        prixAchat: prixAchat ? Number(prixAchat) : 0,
+        prixVente: Number(prixVente),
+        seuilAlerte: Number(seuilAlerte),
+      });
+      onCree(article);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setEnvoiEnCours(false);
+    }
+  }
+
+  return (
+    <div style={styles.overlay} onClick={onFermer}>
+      <form style={styles.formulaire} onClick={(e) => e.stopPropagation()} onSubmit={gererSoumission}>
+        <h2 style={styles.titreFormulaire}>Nouvel article</h2>
+
+        {erreur && <p style={{ color: 'var(--error)' }}>{erreur}</p>}
+
+        <label style={styles.champLabel}>
+          Désignation *
+          <input style={styles.champInput} value={designation} onChange={(e) => setDesignation(e.target.value)} />
+        </label>
+
+        <label style={styles.champLabel}>
+          Code-barre
+          <input
+            style={styles.champInput}
+            placeholder="Scanner ou laisser vide (généré plus tard)"
+            value={codeBarre}
+            onChange={(e) => setCodeBarre(e.target.value)}
+          />
+        </label>
+
+        <label style={styles.champLabel}>
+          Code article (interne)
+          <input
+            style={styles.champInput}
+            placeholder="Optionnel"
+            value={codeInterne}
+            onChange={(e) => setCodeInterne(e.target.value)}
+          />
+        </label>
+
+        <label style={styles.champLabel}>
+          Famille *
+          <div style={styles.ligneAvecBouton}>
+            <select
+              style={{ ...styles.champInput, flex: 1 }}
+              value={familleId}
+              onChange={(e) => {
+                setFamilleId(e.target.value);
+                setSousFamilleId('');
+              }}
+            >
+              <option value="">—</option>
+              {familles.map((f) => (
+                <option key={f.id} value={f.id}>{f.nom}</option>
+              ))}
+            </select>
+            <button type="button" onClick={() => setNouvelleFamilleOuverte((v) => !v)} style={styles.boutonPlus}>+</button>
+          </div>
+        </label>
+
+        {nouvelleFamilleOuverte && (
+          <div style={styles.blocCreationRapide}>
+            <input
+              style={styles.champInput}
+              placeholder="Nom de la nouvelle famille…"
+              value={nomNouvelleFamille}
+              onChange={(e) => setNomNouvelleFamille(e.target.value)}
+            />
+            <button type="button" onClick={creerNouvelleFamille} disabled={creationEnCours} style={styles.boutonValiderPetit}>
+              Créer
+            </button>
+          </div>
+        )}
+
+        {familleId && (
+          <label style={styles.champLabel}>
+            Sous-famille *
+            <div style={styles.ligneAvecBouton}>
+              <select
+                style={{ ...styles.champInput, flex: 1 }}
+                value={sousFamilleId}
+                onChange={(e) => setSousFamilleId(e.target.value)}
+              >
+                <option value="">—</option>
+                {sousFamillesDisponibles.map((sf) => (
+                  <option key={sf.id} value={sf.id}>{sf.nom} ({sf.codePrefixe})</option>
+                ))}
+              </select>
+              <button type="button" onClick={() => setNouvelleSousFamilleOuverte((v) => !v)} style={styles.boutonPlus}>+</button>
+            </div>
+          </label>
+        )}
+
+        {nouvelleSousFamilleOuverte && (
+          <div style={styles.blocCreationRapide}>
+            <input
+              style={styles.champInput}
+              placeholder="Nom de la sous-famille…"
+              value={nomNouvelleSousFamille}
+              onChange={(e) => setNomNouvelleSousFamille(e.target.value)}
+            />
+            <input
+              style={{ ...styles.champInput, maxWidth: 100 }}
+              placeholder="Code (ex: ANDT)"
+              value={codeNouvelleSousFamille}
+              onChange={(e) => setCodeNouvelleSousFamille(e.target.value.toUpperCase())}
+            />
+            <button type="button" onClick={creerNouvelleSousFamille} disabled={creationEnCours} style={styles.boutonValiderPetit}>
+              Créer
+            </button>
+          </div>
+        )}
+
+        <label style={styles.champLabel}>
+          Prix d'achat
+          <input type="number" style={styles.champInput} value={prixAchat} onChange={(e) => setPrixAchat(e.target.value)} />
+        </label>
+
+        <label style={styles.champLabel}>
+          Prix de vente *
+          <input type="number" style={styles.champInput} value={prixVente} onChange={(e) => setPrixVente(e.target.value)} />
+        </label>
+
+        <label style={styles.champLabel}>
+          Seuil d'alerte stock
+          <input type="number" style={styles.champInput} value={seuilAlerte} onChange={(e) => setSeuilAlerte(e.target.value)} />
+        </label>
+
+        <div style={styles.boutonsFormulaire}>
+          <button type="button" onClick={onFermer} style={styles.boutonAnnuler}>Annuler</button>
+          <button type="submit" disabled={envoiEnCours} style={styles.boutonValider}>
+            {envoiEnCours ? 'Enregistrement…' : 'Créer'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -1022,4 +1279,13 @@ const styles = {
   tableau: { width: '100%', borderCollapse: 'collapse', fontSize: 13 },
   th: { textAlign: 'left', padding: '10px 8px', borderBottom: '2px solid var(--gold-mid)', color: 'var(--brown-soft)', fontWeight: 700 },
   td: { padding: '10px 8px', borderBottom: '1px solid var(--cream-deep)' },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(46,26,13,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100 },
+  formulaire: { background: 'var(--white)', borderRadius: 16, padding: 28, width: '100%', maxWidth: 420, maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 },
+  titreFormulaire: { fontFamily: 'var(--font-display)', margin: 0, marginBottom: 8 },
+  ligneAvecBouton: { display: 'flex', gap: 6, alignItems: 'stretch' },
+  boutonPlus: { padding: '0 14px', borderRadius: 8, border: 'none', background: 'var(--gold-mid)', color: 'var(--white)', cursor: 'pointer', fontWeight: 700, fontSize: 16 },
+  blocCreationRapide: { display: 'flex', gap: 6, padding: 10, background: 'var(--cream)', borderRadius: 8 },
+  boutonValiderPetit: { padding: '8px 12px', borderRadius: 6, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' },
+  boutonsFormulaire: { display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 },
+  boutonAnnuler: { padding: '10px 16px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer' },
 };
