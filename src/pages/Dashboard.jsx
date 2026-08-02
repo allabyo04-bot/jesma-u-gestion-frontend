@@ -74,6 +74,21 @@ export default function Dashboard() {
               <div style={{ fontSize: 13, opacity: 0.7 }}>Demandes de remise</div>
               <div style={{ fontSize: 24, fontWeight: 700 }}>{dashboard.demandesRemiseEnAttente}</div>
             </div>
+            <div
+              style={{ background: '#FBF3DD', padding: 20, borderRadius: 12, cursor: 'pointer' }}
+              onClick={() => navigate('/listes-cadeaux')}
+            >
+              <div style={{ fontSize: 13, opacity: 0.7 }}>Listes cadeaux</div>
+              <div style={{ fontSize: 24, fontWeight: 700 }}>{dashboard.listesCadeaux.listesActives} active(s)</div>
+              <div style={{ fontSize: 12, opacity: 0.6 }}>
+                {dashboard.listesCadeaux.offresEnAttente > 0
+                  ? `⚠ ${dashboard.listesCadeaux.offresEnAttente} offre(s) à valider`
+                  : 'Aucune offre en attente'}
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.6 }}>
+                {dashboard.listesCadeaux.totalOfferConfirme.toLocaleString('fr-FR')} F offerts au total
+              </div>
+            </div>
           </div>
         )}
 
