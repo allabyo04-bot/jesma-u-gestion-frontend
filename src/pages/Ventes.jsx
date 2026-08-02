@@ -17,17 +17,6 @@ const MODES_PAIEMENT = [
   'Wave', 'DJAMO', 'Carte bancaire', 'Avoir',
 ];
 
-const CLE_STOCKAGE_ATTENTE = 'jesma_ventes_attente';
-
-function chargerVentesEnAttente() {
-  try {
-    const brut = localStorage.getItem(CLE_STOCKAGE_ATTENTE);
-    return brut ? JSON.parse(brut) : [];
-  } catch {
-    return [];
-  }
-}
-
 // ------------------------------------------------------------
 // TICKET DE CAISSE
 // ------------------------------------------------------------
@@ -123,6 +112,8 @@ export default function Ventes() {
   const [panier, setPanier] = useState([]);
   const [filtrePanier, setFiltrePanier] = useState('');
   const finPanierRef = useRef(null);
+  const champRechercheRef = useRef(null);
+  const minuteurScanRef = useRef(null);
   const [recherche, setRecherche] = useState('');
   const [resultats, setResultats] = useState([]);
   const [erreurRecherche, setErreurRecherche] = useState('');
@@ -156,6 +147,13 @@ export default function Ventes() {
   const [carteCadeauVerifiee, setCarteCadeauVerifiee] = useState(null);
   const [carteCadeauVerificationEnCours, setCarteCadeauVerificationEnCours] = useState(false);
   const [erreurCarteCadeau, setErreurCarteCadeau] = useState('');
+
+  // --- Création rapide d'un client depuis l'écran de vente ---
+  const [creationClientOuverte, setCreationClientOuverte] = useState(false);
+  const [nomNouveauClient, setNomNouveauClient] = useState('');
+  const [telephoneNouveauClient, setTelephoneNouveauClient] = useState('');
+  const [erreurNouveauClient, setErreurNouveauClient] = useState('');
+  const [creationClientEnCours, setCreationClientEnCours] = useState(false);
 
   // --- Facture pro forma chargée pour reprendre directement une vente préparée ---
   const [numeroProForma, setNumeroProForma] = useState('');
@@ -210,8 +208,12 @@ export default function Ventes() {
   useEffect(() => {
     appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
     appelApi('GET', '/clients').then(setClients).catch(() => {});
-    setVentesEnAttente(chargerVentesEnAttente());
+    chargerVentesEnAttenteServeur();
   }, []);
+
+  function chargerVentesEnAttenteServeur() {
+    appelApi('GET', '/ventes/en-attente').then(setVentesEnAttente).catch(() => {});
+  }
 
   // Fait défiler automatiquement le panier jusqu'au dernier article ajouté/modifié —
   // sans ça, une longue liste oblige à scroller à la main pour voir/ajuster la dernière
@@ -424,6 +426,35 @@ export default function Ventes() {
     setErreurProForma('');
   }
 
+  async function creerClientRapide() {
+    setErreurNouveauClient('');
+    if (!nomNouveauClient.trim()) {
+      setErreurNouveauClient('Le nom complet est requis.');
+      return;
+    }
+    if (!telephoneNouveauClient.trim()) {
+      setErreurNouveauClient('Le téléphone est requis.');
+      return;
+    }
+    setCreationClientEnCours(true);
+    try {
+      const client = await appelApi('POST', '/clients', {
+        nomComplet: nomNouveauClient.trim(),
+        telephone: telephoneNouveauClient.trim(),
+      });
+      setClients((prec) => [...prec, client]);
+      setClientId(String(client.id));
+      setClientSearch('');
+      setCreationClientOuverte(false);
+      setNomNouveauClient('');
+      setTelephoneNouveauClient('');
+    } catch (err) {
+      setErreurNouveauClient(err.message);
+    } finally {
+      setCreationClientEnCours(false);
+    }
+  }
+
   async function gererRechercheRetour(e) {
     e.preventDefault();
     const q = rechercheRetour.trim();
@@ -586,13 +617,8 @@ export default function Ventes() {
     }
   }
 
-  function sauvegarderListeAttente(liste) {
-    setVentesEnAttente(liste);
-    localStorage.setItem(CLE_STOCKAGE_ATTENTE, JSON.stringify(liste));
-  }
-
   async function gererRecherche(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     const q = recherche.trim();
     if (!q) return;
 
@@ -605,6 +631,7 @@ export default function Ventes() {
         ajouterAuPanier(reponse.resultats[0]);
         setResultats([]);
         setRecherche('');
+        champRechercheRef.current?.focus();
       } else {
         setResultats(reponse.resultats);
       }
@@ -612,6 +639,19 @@ export default function Ventes() {
       setErreurRecherche(err.message);
     } finally {
       setRechercheEnCours(false);
+    }
+  }
+
+  // Un scanner de code-barres "tape" très vite puis n'appuie pas toujours sur Entrée
+  // selon le modèle — on détecte donc une frappe rapide et longue (typique d'un scan)
+  // pour lancer la recherche automatiquement, sans clic ni Entrée nécessaires.
+  function gererSaisieRecherche(valeur) {
+    setRecherche(valeur);
+    if (minuteurScanRef.current) clearTimeout(minuteurScanRef.current);
+    if (valeur.trim().length >= 6) {
+      minuteurScanRef.current = setTimeout(() => {
+        gererRecherche();
+      }, 120);
     }
   }
 
@@ -655,6 +695,7 @@ export default function Ventes() {
     ajouterAuPanier(article);
     setResultats([]);
     setRecherche('');
+    champRechercheRef.current?.focus();
   }
 
   function reinitialiserVente() {
@@ -664,6 +705,7 @@ export default function Ventes() {
     setMotifRemise('');
     setClientId('');
     setClientSearch('');
+    setCreationClientOuverte(false);
     setPaiements([]);
     setMontantAAjouter('');
     setTypeVente('Comptant');
@@ -714,49 +756,58 @@ export default function Ventes() {
     setPaiements((prec) => prec.filter((_, i) => i !== index));
   }
 
-  function mettreEnAttente() {
+  async function mettreEnAttente() {
     setErreurVente('');
     if (panier.length === 0) {
       setErreurVente('Le panier est vide, rien à mettre en attente.');
       return;
     }
 
-    const venteSuspendue = {
-      id: Date.now(),
-      createdAt: new Date().toISOString(),
-      panier,
-      remiseMontant,
-      motifRemise,
-      lieuId,
-      vendeurId,
-      clientId,
-      typeVente,
-    };
-
-    sauvegarderListeAttente([venteSuspendue, ...ventesEnAttente]);
-    reinitialiserVente();
-    setConfirmation(null);
+    try {
+      await appelApi('POST', '/ventes/en-attente', {
+        lieuId: lieuId || undefined,
+        vendeurId: vendeurId || undefined,
+        clientId: clientId || undefined,
+        typeVente,
+        remiseMontant: remiseMontant || undefined,
+        motifRemise: motifRemise || undefined,
+        panier,
+      });
+      chargerVentesEnAttenteServeur();
+      reinitialiserVente();
+      setConfirmation(null);
+    } catch (err) {
+      setErreurVente(err.message);
+    }
   }
 
-  function reprendreVente(id) {
+  async function reprendreVente(id) {
     const vente = ventesEnAttente.find((v) => v.id === id);
     if (!vente) return;
 
     setPanier(vente.panier);
-    setRemiseMontant(vente.remiseMontant);
-    setMotifRemise(vente.motifRemise);
-    setLieuId(vente.lieuId);
-    setVendeurId(vente.vendeurId);
+    setRemiseMontant(vente.remiseMontant || '');
+    setMotifRemise(vente.motifRemise || '');
+    setLieuId(vente.lieuId || '');
+    setVendeurId(vente.vendeurId || '');
     setClientId(vente.clientId || '');
-    setTypeVente(vente.typeVente);
+    setTypeVente(vente.typeVente || 'Comptant');
     setPaiements([]);
 
-    sauvegarderListeAttente(ventesEnAttente.filter((v) => v.id !== id));
+    try {
+      await appelApi('DELETE', `/ventes/en-attente/${id}`);
+    } catch { /* la reprise se fait quand même côté écran */ }
+    chargerVentesEnAttenteServeur();
     setOngletActif('nouvelle');
   }
 
-  function supprimerVenteEnAttente(id) {
-    sauvegarderListeAttente(ventesEnAttente.filter((v) => v.id !== id));
+  async function supprimerVenteEnAttente(id) {
+    try {
+      await appelApi('DELETE', `/ventes/en-attente/${id}`);
+      chargerVentesEnAttenteServeur();
+    } catch (err) {
+      setErreurVente(err.message);
+    }
   }
 
   async function validerVente() {
@@ -1391,11 +1442,41 @@ export default function Ventes() {
                         ).length === 0 && (
                           <div style={{ padding: '8px 10px', fontSize: 13, color: 'var(--brown-soft)' }}>
                             Aucun client trouvé.
+                            <button
+                              type="button"
+                              onClick={() => { setCreationClientOuverte(true); setNomNouveauClient(clientSearch); }}
+                              style={{ ...styles.boutonAjouterPaiement, marginLeft: 8 }}
+                            >
+                              + Créer
+                            </button>
                           </div>
                         )}
                       </div>
                     )}
                   </>
+                )}
+                {creationClientOuverte && (
+                  <div style={{ ...styles.lignePaiement, flexDirection: 'column', alignItems: 'stretch', gap: 6, background: 'var(--cream)' }}>
+                    <input
+                      style={styles.champInput}
+                      placeholder="Nom complet *"
+                      value={nomNouveauClient}
+                      onChange={(e) => setNomNouveauClient(e.target.value)}
+                    />
+                    <input
+                      style={styles.champInput}
+                      placeholder="Téléphone *"
+                      value={telephoneNouveauClient}
+                      onChange={(e) => setTelephoneNouveauClient(e.target.value)}
+                    />
+                    {erreurNouveauClient && <p style={{ color: 'var(--error)', fontSize: 12 }}>{erreurNouveauClient}</p>}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button type="button" onClick={() => setCreationClientOuverte(false)} style={styles.boutonRetirer}>Annuler</button>
+                      <button type="button" onClick={creerClientRapide} disabled={creationClientEnCours} style={styles.boutonAjouterPaiement}>
+                        {creationClientEnCours ? '…' : 'Créer et sélectionner'}
+                      </button>
+                    </div>
+                  </div>
                 )}
                 <p style={{ ...styles.texteMuet, marginTop: 4 }}>
                   Laissé vide, la vente est associée à "Client Comptoir".
@@ -1514,11 +1595,12 @@ export default function Ventes() {
                 <h3 style={styles.titreBloc}>Ajouter un article</h3>
                 <form onSubmit={gererRecherche} style={styles.formRecherche}>
                   <input
+                    ref={champRechercheRef}
                     autoFocus
                     style={styles.champInput}
                     placeholder="Scanner ou taper un nom/code…"
                     value={recherche}
-                    onChange={(e) => setRecherche(e.target.value)}
+                    onChange={(e) => gererSaisieRecherche(e.target.value)}
                   />
                   <button type="submit" style={styles.boutonRecherche} disabled={rechercheEnCours}>
                     {rechercheEnCours ? '…' : 'Chercher'}
