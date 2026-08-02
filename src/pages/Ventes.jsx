@@ -118,6 +118,7 @@ export default function Ventes() {
   const [recherche, setRecherche] = useState('');
   const [resultats, setResultats] = useState([]);
   const [erreurRecherche, setErreurRecherche] = useState('');
+  const [avertissementStock, setAvertissementStock] = useState('');
   const [rechercheEnCours, setRechercheEnCours] = useState(false);
   const [remiseMontant, setRemiseMontant] = useState('');
   const [motifRemise, setMotifRemise] = useState('');
@@ -681,12 +682,22 @@ export default function Ventes() {
   }
 
   function ajouterAuPanier(article) {
+    const stockDispo = article.stockLieu ?? article.stockActuel;
+    setAvertissementStock('');
     setPanier((prec) => {
       const existant = prec.find((l) => l.articleId === article.id);
       if (existant) {
+        if (stockDispo != null && existant.quantite >= stockDispo) {
+          setAvertissementStock(`Stock épuisé pour "${article.designation}" (${stockDispo} disponible(s)).`);
+          return prec;
+        }
         return prec.map((l) =>
           l.articleId === article.id ? { ...l, quantite: l.quantite + 1 } : l
         );
+      }
+      if (stockDispo != null && stockDispo <= 0) {
+        setAvertissementStock(`"${article.designation}" n'a plus de stock disponible.`);
+        return prec;
       }
       return [
         ...prec,
@@ -695,7 +706,7 @@ export default function Ventes() {
           designation: article.designation,
           prixUnitaire: Number(article.prixVente),
           quantite: 1,
-          stockDispo: article.stockLieu ?? article.stockActuel,
+          stockDispo,
           photoUrl: article.photoUrl || null,
         },
       ];
@@ -703,11 +714,17 @@ export default function Ventes() {
   }
 
   function changerQuantite(articleId, delta) {
+    setAvertissementStock('');
     setPanier((prec) =>
       prec
-        .map((l) =>
-          l.articleId === articleId ? { ...l, quantite: Math.max(0, l.quantite + delta) } : l
-        )
+        .map((l) => {
+          if (l.articleId !== articleId) return l;
+          if (delta > 0 && l.stockDispo != null && l.quantite >= l.stockDispo) {
+            setAvertissementStock(`Stock épuisé pour "${l.designation}" (${l.stockDispo} disponible(s)).`);
+            return l;
+          }
+          return { ...l, quantite: Math.max(0, l.quantite + delta) };
+        })
         .filter((l) => l.quantite > 0)
     );
   }
@@ -726,6 +743,7 @@ export default function Ventes() {
   function reinitialiserVente() {
     setPanier([]);
     setFiltrePanier('');
+    setAvertissementStock('');
     setRemiseMontant('');
     setMotifRemise('');
     setClientId('');
@@ -1663,6 +1681,9 @@ export default function Ventes() {
               <div style={styles.colonnePanier}>
                 <h3 style={styles.titreBloc}>Panier</h3>
                 {panier.length === 0 && <p style={styles.texteMuet}>Aucun article ajouté.</p>}
+                {avertissementStock && (
+                  <div style={{ ...styles.bandeauErreur, marginBottom: 8 }}>{avertissementStock}</div>
+                )}
                 {panier.length > 4 && (
                   <input
                     style={{ ...styles.champInput, marginBottom: 8 }}
@@ -1679,6 +1700,7 @@ export default function Ventes() {
                   })
                   .map((ligne) => {
                   const stockRestant = ligne.stockDispo != null ? ligne.stockDispo - ligne.quantite : null;
+                  const stockEpuise = ligne.stockDispo != null && ligne.quantite >= ligne.stockDispo;
                   return (
                     <div key={ligne.articleId} style={styles.ligneAmpanier}>
                       <div style={{ flex: 1 }}>
@@ -1695,7 +1717,13 @@ export default function Ventes() {
                       <div style={styles.controlesQuantite}>
                         <button onClick={() => changerQuantite(ligne.articleId, -1)} style={styles.boutonQte}>−</button>
                         <span>{ligne.quantite}</span>
-                        <button onClick={() => changerQuantite(ligne.articleId, 1)} style={styles.boutonQte}>+</button>
+                        <button
+                          onClick={() => changerQuantite(ligne.articleId, 1)}
+                          disabled={stockEpuise}
+                          style={{ ...styles.boutonQte, opacity: stockEpuise ? 0.4 : 1, cursor: stockEpuise ? 'not-allowed' : 'pointer' }}
+                        >
+                          +
+                        </button>
                       </div>
                       <button onClick={() => retirerDuPanier(ligne.articleId)} style={styles.boutonRetirer}>✕</button>
                     </div>
