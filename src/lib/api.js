@@ -125,6 +125,31 @@ export async function telechargerFichierAvecAuth(chemin, nomFichier) {
   window.URL.revokeObjectURL(url);
 }
 
+// Upload multipart pour l'aperçu d'inventaire (fichier Excel + lieuId dans le même envoi)
+export async function uploaderFichierApercuInventaire(fichier, lieuId) {
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const formData = new FormData();
+  formData.append('fichier', fichier);
+  formData.append('lieuId', lieuId);
+
+  const reponse = await fetch(`${BASE_URL}/stock/inventaire/apercu`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  const texte = await reponse.text();
+  let data;
+  try { data = texte ? JSON.parse(texte) : null; } catch { data = texte; }
+  if (!reponse.ok) {
+    const message = (data && data.error) || "Échec de la lecture du fichier.";
+    throw new Error(message);
+  }
+  return data;
+}
+
 // Upload multipart générique (fichier Excel d'import stock)
 export async function uploaderFichierImport(fichier) {
   const headers = {};

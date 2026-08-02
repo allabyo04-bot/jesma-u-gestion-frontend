@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { appelApi, uploaderFichierImport } from '../lib/api';
+import { appelApi, uploaderFichierImport, telechargerFichierAvecAuth, uploaderFichierApercuInventaire } from '../lib/api';
 
 const SOUS_ONGLETS = [
   { id: 'reception', label: 'Réception' },
@@ -9,6 +9,7 @@ const SOUS_ONGLETS = [
   { id: 'historique', label: 'Historique des mouvements' },
   { id: 'etat', label: 'État du stock' },
   { id: 'etat-global', label: 'État global (tous dépôts)' },
+  { id: 'inventaire', label: 'Inventaire (Excel)' },
 ];
 
 const LIBELLES_TYPE = {
@@ -71,8 +72,9 @@ export default function Stock() {
       {ongletActif === 'import' && <OngletImportExcel lieux={lieux} />}
       {ongletActif === 'transferts' && <OngletTransferts lieux={lieux} articles={articles} />}
       {ongletActif === 'historique' && <OngletHistorique articles={articles} lieux={lieux} />}
-      {ongletActif === 'etat' && <OngletEtatStock lieux={lieux} />}
-      {ongletActif === 'etat-global' && <OngletEtatGlobal lieux={lieux} articles={articles} />}
+      {ongletActif === 'etat' && <OngletEtatStock lieux={lieux} familles={familles} />}
+      {ongletActif === 'etat-global' && <OngletEtatGlobal lieux={lieux} articles={articles} familles={familles} />}
+      {ongletActif === 'inventaire' && <OngletInventaire lieux={lieux} familles={familles} />}
     </div>
   );
 }
@@ -937,10 +939,12 @@ function OngletHistorique({ articles, lieux }) {
 // ------------------------------------------------------------
 // ONGLET ÉTAT DU STOCK
 // ------------------------------------------------------------
-function OngletEtatStock({ lieux }) {
+function OngletEtatStock({ lieux, familles }) {
   const [lieuId, setLieuId] = useState('');
   const [stocks, setStocks] = useState([]);
   const [chargement, setChargement] = useState(false);
+  const [familleId, setFamilleId] = useState('');
+  const [sousFamilleId, setSousFamilleId] = useState('');
 
   useEffect(() => {
     if (!lieuId) {
@@ -954,24 +958,59 @@ function OngletEtatStock({ lieux }) {
       .finally(() => setChargement(false));
   }, [lieuId]);
 
+  const familleSelectionnee = familles.find((f) => f.id === Number(familleId));
+  const sousFamillesDisponibles = familleSelectionnee?.sousFamilles || [];
+
+  const stocksFiltres = stocks.filter((s) => {
+    if (familleId && s.article.familleId !== Number(familleId)) return false;
+    if (sousFamilleId && s.article.sousFamilleId !== Number(sousFamilleId)) return false;
+    return true;
+  });
+
   return (
     <div style={styles.carte}>
-      <label style={styles.champLabel}>
-        Boutique / Entrepôt
-        <select style={styles.champInput} value={lieuId} onChange={(e) => setLieuId(e.target.value)}>
-          <option value="">Sélectionnez un lieu…</option>
-          {lieux.map((l) => (
-            <option key={l.id} value={l.id}>{l.nom}</option>
-          ))}
-        </select>
-      </label>
+      <div style={styles.ligneChamps}>
+        <label style={styles.champLabel}>
+          Boutique / Entrepôt
+          <select style={styles.champInput} value={lieuId} onChange={(e) => setLieuId(e.target.value)}>
+            <option value="">Sélectionnez un lieu…</option>
+            {lieux.map((l) => (
+              <option key={l.id} value={l.id}>{l.nom}</option>
+            ))}
+          </select>
+        </label>
+        <label style={styles.champLabel}>
+          Famille
+          <select
+            style={styles.champInput}
+            value={familleId}
+            onChange={(e) => { setFamilleId(e.target.value); setSousFamilleId(''); }}
+          >
+            <option value="">Toutes</option>
+            {familles.map((f) => (
+              <option key={f.id} value={f.id}>{f.nom}</option>
+            ))}
+          </select>
+        </label>
+        {familleId && (
+          <label style={styles.champLabel}>
+            Sous-famille
+            <select style={styles.champInput} value={sousFamilleId} onChange={(e) => setSousFamilleId(e.target.value)}>
+              <option value="">Toutes</option>
+              {sousFamillesDisponibles.map((sf) => (
+                <option key={sf.id} value={sf.id}>{sf.nom}</option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
 
       {chargement && <p style={styles.texteMuet}>Chargement…</p>}
-      {!chargement && lieuId && stocks.length === 0 && (
-        <p style={styles.texteMuet}>Aucun stock enregistré pour ce lieu.</p>
+      {!chargement && lieuId && stocksFiltres.length === 0 && (
+        <p style={styles.texteMuet}>Aucun stock enregistré pour ce filtre.</p>
       )}
 
-      {!chargement && stocks.length > 0 && (
+      {!chargement && stocksFiltres.length > 0 && (
         <div style={styles.tableauScroll}>
           <table style={styles.tableau}>
             <thead>
@@ -982,7 +1021,7 @@ function OngletEtatStock({ lieux }) {
               </tr>
             </thead>
             <tbody>
-              {stocks.map((s) => (
+              {stocksFiltres.map((s) => (
                 <tr key={s.id}>
                   <td style={styles.td}>{s.article.designation}</td>
                   <td style={styles.td}>{s.article.reference}</td>
@@ -1008,9 +1047,11 @@ function OngletEtatStock({ lieux }) {
 // ------------------------------------------------------------
 // ONGLET ÉTAT GLOBAL (TOUS DÉPÔTS)
 // ------------------------------------------------------------
-function OngletEtatGlobal({ lieux, articles }) {
+function OngletEtatGlobal({ lieux, articles, familles }) {
   const [chargement, setChargement] = useState(true);
   const [lignesParArticle, setLignesParArticle] = useState({});
+  const [familleId, setFamilleId] = useState('');
+  const [sousFamilleId, setSousFamilleId] = useState('');
 
   useEffect(() => {
     if (lieux.length === 0) return;
@@ -1031,16 +1072,52 @@ function OngletEtatGlobal({ lieux, articles }) {
       .finally(() => setChargement(false));
   }, [lieux]);
 
+  const familleSelectionnee = familles.find((f) => f.id === Number(familleId));
+  const sousFamillesDisponibles = familleSelectionnee?.sousFamilles || [];
+
+  const articlesFiltres = articles.filter((a) => {
+    if (familleId && a.familleId !== Number(familleId)) return false;
+    if (sousFamilleId && a.sousFamilleId !== Number(sousFamilleId)) return false;
+    return true;
+  });
+
   return (
     <div style={styles.carte}>
       <h3 style={styles.titreCarte}>État du stock — tous dépôts</h3>
 
+      <div style={styles.ligneChamps}>
+        <label style={styles.champLabel}>
+          Famille
+          <select
+            style={styles.champInput}
+            value={familleId}
+            onChange={(e) => { setFamilleId(e.target.value); setSousFamilleId(''); }}
+          >
+            <option value="">Toutes</option>
+            {familles.map((f) => (
+              <option key={f.id} value={f.id}>{f.nom}</option>
+            ))}
+          </select>
+        </label>
+        {familleId && (
+          <label style={styles.champLabel}>
+            Sous-famille
+            <select style={styles.champInput} value={sousFamilleId} onChange={(e) => setSousFamilleId(e.target.value)}>
+              <option value="">Toutes</option>
+              {sousFamillesDisponibles.map((sf) => (
+                <option key={sf.id} value={sf.id}>{sf.nom}</option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+
       {chargement && <p style={styles.texteMuet}>Chargement…</p>}
-      {!chargement && articles.length === 0 && (
-        <p style={styles.texteMuet}>Aucun article pour l'instant.</p>
+      {!chargement && articlesFiltres.length === 0 && (
+        <p style={styles.texteMuet}>Aucun article pour ce filtre.</p>
       )}
 
-      {!chargement && articles.length > 0 && (
+      {!chargement && articlesFiltres.length > 0 && (
         <div style={styles.tableauScroll}>
           <table style={styles.tableau}>
             <thead>
@@ -1054,7 +1131,7 @@ function OngletEtatGlobal({ lieux, articles }) {
               </tr>
             </thead>
             <tbody>
-              {articles.map((a) => {
+              {articlesFiltres.map((a) => {
                 const quantitesParLieu = lignesParArticle[a.id] || {};
                 const total = lieux.reduce((s, l) => s + (quantitesParLieu[l.id] || 0), 0);
                 return (
@@ -1249,6 +1326,224 @@ function OngletImportExcel({ lieux }) {
     </div>
   );
 }
+
+// ------------------------------------------------------------
+// ONGLET INVENTAIRE (EXCEL) — export d'une feuille de comptage SANS quantité théorique
+// (pour forcer un vrai comptage physique), puis réimport avec calcul des écarts et
+// confirmation des corrections.
+// ------------------------------------------------------------
+function OngletInventaire({ lieux, familles }) {
+  const [lieuId, setLieuId] = useState('');
+  const [familleId, setFamilleId] = useState('');
+  const [sousFamilleId, setSousFamilleId] = useState('');
+  const [exportEnCours, setExportEnCours] = useState(false);
+  const [fichier, setFichier] = useState(null);
+  const [apercu, setApercu] = useState(null);
+  const [lectureEnCours, setLectureEnCours] = useState(false);
+  const [confirmationEnCours, setConfirmationEnCours] = useState(false);
+  const [erreur, setErreur] = useState('');
+  const [succes, setSucces] = useState('');
+
+  const familleSelectionnee = familles.find((f) => f.id === Number(familleId));
+  const sousFamillesDisponibles = familleSelectionnee?.sousFamilles || [];
+
+  async function exporterFeuille() {
+    if (!lieuId) {
+      setErreur('Choisissez une boutique/entrepôt avant d\'exporter.');
+      return;
+    }
+    setErreur('');
+    setExportEnCours(true);
+    try {
+      const params = new URLSearchParams({ lieuId });
+      if (familleId) params.set('familleId', familleId);
+      if (sousFamilleId) params.set('sousFamilleId', sousFamilleId);
+      await telechargerFichierAvecAuth(`/stock/inventaire/export?${params.toString()}`, 'feuille-inventaire.xlsx');
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setExportEnCours(false);
+    }
+  }
+
+  function gererChoixFichier(e) {
+    setFichier(e.target.files[0] || null);
+    setApercu(null);
+    setErreur('');
+    setSucces('');
+  }
+
+  async function analyserFichier() {
+    if (!lieuId) {
+      setErreur('Choisissez la boutique/entrepôt concerné par ce comptage.');
+      return;
+    }
+    if (!fichier) {
+      setErreur('Choisissez le fichier Excel rempli à analyser.');
+      return;
+    }
+    setErreur('');
+    setSucces('');
+    setLectureEnCours(true);
+    try {
+      const resultat = await uploaderFichierApercuInventaire(fichier, lieuId);
+      setApercu(resultat);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setLectureEnCours(false);
+    }
+  }
+
+  const lignesAvecEcart = apercu ? apercu.filter((l) => l.statut === 'ECART') : [];
+  const lignesConformes = apercu ? apercu.filter((l) => l.statut === 'CONFORME') : [];
+  const lignesProblematiques = apercu ? apercu.filter((l) => l.statut !== 'ECART' && l.statut !== 'CONFORME') : [];
+
+  async function confirmerCorrections() {
+    setErreur('');
+    setSucces('');
+    setConfirmationEnCours(true);
+    try {
+      const resultat = await appelApi('POST', '/stock/inventaire/confirmer', {
+        lieuId,
+        lignes: lignesAvecEcart.map((l) => ({ articleId: l.articleId, quantiteComptee: l.quantiteComptee })),
+      });
+      setSucces(`${resultat.corrigees} article(s) corrigé(s) avec succès.`);
+      setApercu(null);
+      setFichier(null);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setConfirmationEnCours(false);
+    }
+  }
+
+  return (
+    <div style={styles.carte}>
+      <h3 style={styles.titreCarte}>1. Exporter la feuille de comptage</h3>
+      <p style={styles.texteMuet}>
+        La quantité en stock n'apparaît volontairement pas sur cette feuille — comptez physiquement
+        chaque article et notez le résultat dans la colonne "Quantité comptée".
+      </p>
+
+      <div style={styles.ligneChamps}>
+        <label style={styles.champLabel}>
+          Boutique / Entrepôt *
+          <select style={styles.champInput} value={lieuId} onChange={(e) => setLieuId(e.target.value)}>
+            <option value="">—</option>
+            {lieux.map((l) => (
+              <option key={l.id} value={l.id}>{l.nom}</option>
+            ))}
+          </select>
+        </label>
+        <label style={styles.champLabel}>
+          Famille
+          <select
+            style={styles.champInput}
+            value={familleId}
+            onChange={(e) => { setFamilleId(e.target.value); setSousFamilleId(''); }}
+          >
+            <option value="">Toutes</option>
+            {familles.map((f) => (
+              <option key={f.id} value={f.id}>{f.nom}</option>
+            ))}
+          </select>
+        </label>
+        {familleId && (
+          <label style={styles.champLabel}>
+            Sous-famille
+            <select style={styles.champInput} value={sousFamilleId} onChange={(e) => setSousFamilleId(e.target.value)}>
+              <option value="">Toutes</option>
+              {sousFamillesDisponibles.map((sf) => (
+                <option key={sf.id} value={sf.id}>{sf.nom}</option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+
+      {erreur && <div style={styles.bandeauErreur}>{erreur}</div>}
+      {succes && <div style={styles.bandeauConfirmation}>{succes}</div>}
+
+      <button onClick={exporterFeuille} disabled={exportEnCours} style={styles.boutonValider}>
+        {exportEnCours ? 'Génération…' : 'Exporter la feuille de comptage (.xlsx)'}
+      </button>
+
+      <h3 style={{ ...styles.titreCarte, marginTop: 28 }}>2. Réimporter les quantités comptées</h3>
+      <p style={styles.texteMuet}>
+        Reprenez le même fichier une fois rempli avec les quantités réellement comptées, pour le même lieu.
+      </p>
+
+      <input type="file" accept=".xlsx,.xls" onChange={gererChoixFichier} style={styles.champInput} />
+      <button
+        onClick={analyserFichier}
+        disabled={lectureEnCours || !fichier}
+        style={{ ...styles.boutonValiderPetit, marginTop: 10 }}
+      >
+        {lectureEnCours ? 'Lecture…' : 'Analyser le fichier'}
+      </button>
+
+      {apercu && (
+        <>
+          <h3 style={{ ...styles.titreCarte, marginTop: 24 }}>
+            3. Aperçu — {lignesAvecEcart.length} écart(s), {lignesConformes.length} conforme(s)
+            {lignesProblematiques.length > 0 ? `, ${lignesProblematiques.length} ligne(s) à corriger` : ''}
+          </h3>
+
+          {lignesProblematiques.length > 0 && (
+            <div style={styles.bandeauErreur}>
+              {lignesProblematiques.map((l, i) => (
+                <div key={i}>{l.reference} — {l.erreur}</div>
+              ))}
+            </div>
+          )}
+
+          {lignesAvecEcart.length > 0 && (
+            <div style={styles.tableauScroll}>
+              <table style={styles.tableau}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Article</th>
+                    <th style={styles.th}>Référence</th>
+                    <th style={styles.th}>Théorique</th>
+                    <th style={styles.th}>Compté</th>
+                    <th style={styles.th}>Écart</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lignesAvecEcart.map((l) => (
+                    <tr key={l.articleId}>
+                      <td style={styles.td}>{l.designation}</td>
+                      <td style={styles.td}>{l.reference}</td>
+                      <td style={styles.td}>{l.quantiteTheorique}</td>
+                      <td style={styles.td}>{l.quantiteComptee}</td>
+                      <td style={{ ...styles.td, fontWeight: 700, color: l.ecart < 0 ? 'var(--error)' : '#1E6B36' }}>
+                        {l.ecart > 0 ? `+${l.ecart}` : l.ecart}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {lignesAvecEcart.length === 0 ? (
+            <p style={styles.texteMuet}>Aucun écart détecté — rien à corriger.</p>
+          ) : (
+            <button
+              onClick={confirmerCorrections}
+              disabled={confirmationEnCours}
+              style={{ ...styles.boutonValider, marginTop: 14 }}
+            >
+              {confirmationEnCours ? 'Correction en cours…' : `Confirmer les corrections (${lignesAvecEcart.length} article(s))`}
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 const styles = {
   page: { padding: 32, fontFamily: 'var(--font-body)', color: 'var(--brown-ink)' },
   enTete: { display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20, flexWrap: 'wrap' },
