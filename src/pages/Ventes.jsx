@@ -215,6 +215,30 @@ export default function Ventes() {
     appelApi('GET', '/ventes/en-attente').then(setVentesEnAttente).catch(() => {});
   }
 
+  // Diffuse en temps réel vers l'écran client (double écran caisse) : panier, remise,
+  // et progression vers le cadeau fidélité du client sélectionné (10 achats consécutifs
+  // ≥20 000 F). Cette diffusion n'était jamais branchée jusqu'ici — l'écran client ne
+  // montrait donc jamais le panier en cours, seulement l'écran de remerciement final.
+  useEffect(() => {
+    const clientActuel = clients.find((c) => String(c.id) === String(clientId));
+    const achatsRestants = clientActuel && !clientActuel.estComptoir
+      ? Math.max(0, 10 - (clientActuel.achatsConsecutifs || 0))
+      : null;
+    diffuserEtatPanier({ panier, remise: Math.min(Number(remiseMontant) || 0, panier.reduce((s, l) => s + l.prixUnitaire * l.quantite, 0)), achatsRestantsFidelite: achatsRestants });
+  }, [panier, remiseMontant, clientId, clients]);
+
+  useEffect(() => {
+    return ecouterCanal((message) => {
+      if (message.type === 'DEMANDE_ETAT') {
+        const clientActuel = clients.find((c) => String(c.id) === String(clientId));
+        const achatsRestants = clientActuel && !clientActuel.estComptoir
+          ? Math.max(0, 10 - (clientActuel.achatsConsecutifs || 0))
+          : null;
+        diffuserEtatPanier({ panier, remise: Math.min(Number(remiseMontant) || 0, panier.reduce((s, l) => s + l.prixUnitaire * l.quantite, 0)), achatsRestantsFidelite: achatsRestants });
+      }
+    });
+  }, [panier, remiseMontant, clientId, clients]);
+
   // Fait défiler automatiquement le panier jusqu'au dernier article ajouté/modifié —
   // sans ça, une longue liste oblige à scroller à la main pour voir/ajuster la dernière
   // ligne qu'on vient de scanner.

@@ -64,6 +64,16 @@ export default function EcranClient() {
         </div>
       ) : (
         <>
+          {etat?.achatsRestantsFidelite != null && etat.achatsRestantsFidelite > 1 && (
+            <div style={styles.bandeauFidelite}>
+              🎁 Encore {etat.achatsRestantsFidelite} achats de plus de 20 000 F pour votre cadeau fidélité !
+            </div>
+          )}
+          {etat?.achatsRestantsFidelite === 1 && (
+            <div style={styles.bandeauFidelite}>
+              🎉 Ce 10ème achat vous donne droit à votre cadeau fidélité !
+            </div>
+          )}
           <div style={styles.listeArticles}>
             {panier.map((ligne) => (
               <div key={ligne.articleId} style={styles.carteArticle}>
@@ -124,6 +134,7 @@ const styles = {
   texteAttente: { fontFamily: 'var(--font-display)', fontSize: 36, margin: 0, color: 'var(--gold-deep)' },
   sousTexteAttente: { fontSize: 16, color: 'var(--brown-soft)', marginTop: 12 },
   listeArticles: { flex: 1, overflowY: 'auto', padding: '20px 32px', display: 'flex', flexDirection: 'column', gap: 14 },
+  bandeauFidelite: { margin: '16px 32px 0', padding: '14px 20px', borderRadius: 12, background: 'var(--gold-deep)', color: 'var(--white)', fontSize: 16, fontWeight: 700, textAlign: 'center' },
   carteArticle: {
     display: 'flex', alignItems: 'center', gap: 16, background: 'var(--white)',
     borderRadius: 14, padding: 14, boxShadow: '0 2px 8px rgba(74,44,23,0.1)',
