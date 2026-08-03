@@ -37,8 +37,7 @@ export default function Login() {
         </div>
 
         <div className="brand-copy">
-          <h1>La gestion de votre boutique, avec la douceur de Jesma U.</h1>
-          <p>Stock, ventes, cartes cadeaux et listes cadeaux — tout au même endroit, pensé pour votre équipe.</p>
+          <span className="tagline">L'art d'accueillir la vie et de l'entretenir</span>
         </div>
 
         <svg className="brand-illustration" width="140" height="110" viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg">

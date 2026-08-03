@@ -60,7 +60,7 @@ export default function EcranClient() {
       {panier.length === 0 ? (
         <div style={styles.attenteVide}>
           <p style={styles.texteAttente}>Bienvenue chez Jesma U</p>
-          <p style={styles.sousTexteAttente}>La gestion de votre boutique, avec la douceur de Jesma U.</p>
+          <p style={styles.sousTexteAttente}>L'art d'accueillir la vie et de l'entretenir</p>
         </div>
       ) : (
         <>

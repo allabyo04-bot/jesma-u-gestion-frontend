@@ -88,6 +88,7 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   <hr>
   <div class="pied">Merci de votre visite !</div>
   <div class="coordonnees">
+    L'art d'accueillir la vie et de l'entretenir<br>
     Grand-Bassam, carrefour rosier 5<br>
     WhatsApp +225 07 69 535 786
   </div>

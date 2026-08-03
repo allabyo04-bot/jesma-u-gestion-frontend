@@ -110,6 +110,7 @@ export default function ListeCadeauPublique() {
         <div style={{ ...styles.logoRond, display: 'none' }}>U</div>
         <div>
           <h1 style={styles.titrePrincipal}>Jesma U</h1>
+          <p style={styles.slogan}>L'art d'accueillir la vie et de l'entretenir</p>
           <p style={styles.sousTitre}>
             Liste cadeau de {liste.nomDestinataire || liste.client.nomComplet}
           </p>
@@ -226,6 +227,7 @@ const styles = {
   logoRond: { width: 48, height: 48, borderRadius: '50%', background: 'var(--brown-deep)', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--white)', flexShrink: 0 },
   titrePrincipal: { fontFamily: 'var(--font-display)', margin: 0, fontSize: 22 },
   sousTitre: { margin: 0, fontSize: 13, opacity: 0.85 },
+  slogan: { margin: '2px 0 4px', fontSize: 12, fontStyle: 'italic', opacity: 0.8 },
   contenu: { maxWidth: 640, margin: '0 auto', padding: '24px 20px' },
   titreListe: { fontFamily: 'var(--font-display)', fontSize: 26, margin: '0 0 4px 0' },
   texteMuet: { fontSize: 13, color: 'var(--brown-soft)', margin: 0 },
