@@ -42,17 +42,12 @@
 }
 
 .brand-mark .u-badge {
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, var(--gold-light), var(--gold-deep));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 6px rgba(46, 26, 13, 0.25);
+  object-fit: cover;
+  box-shadow: 0 2px 8px rgba(46, 26, 13, 0.3);
 }
-
-.brand-mark .u-badge svg { width: 20px; height: 20px; }
 
 .brand-mark .wordmark {
   font-family: var(--font-display);

@@ -32,11 +32,7 @@ export default function Login() {
         <div className="arc arc--two" />
 
         <div className="brand-mark">
-          <div className="u-badge">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M6 4v9a6 6 0 0 0 12 0V4" stroke="#4A2C17" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </div>
+          <img src="/logo-jesma-u.png" alt="Jesma U" className="u-badge" />
           <span className="wordmark">Jesma U</span>
         </div>
 
