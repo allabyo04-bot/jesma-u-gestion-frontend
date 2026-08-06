@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { appelApi, getUtilisateur } from '../lib/api';
 import { diffuserEtatPanier, diffuserVenteValidee, ecouterCanal } from '../lib/broadcast';
@@ -16,17 +16,6 @@ const MODES_PAIEMENT = [
   'Espèces', 'Moov Money', 'MTN Money', 'Orange Money',
   'Wave', 'DJAMO', 'Carte bancaire', 'Avoir',
 ];
-
-const CLE_STOCKAGE_ATTENTE = 'jesma_ventes_attente';
-
-function chargerVentesEnAttente() {
-  try {
-    const brut = localStorage.getItem(CLE_STOCKAGE_ATTENTE);
-    return brut ? JSON.parse(brut) : [];
-  } catch {
-    return [];
-  }
-}
 
 // ------------------------------------------------------------
 // TICKET DE CAISSE
@@ -61,24 +50,25 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   @page { size: 80mm auto; margin: 0; }
   body { font-family: 'Courier New', monospace; width: 76mm; margin: 4mm auto; font-size: 12px; color: #000; }
   .centre { text-align: center; }
-  .logo { max-width: 55mm; max-height: 25mm; margin-bottom: 4px; }
-  h1 { font-size: 16px; margin: 0 0 2px 0; }
-  .sous-titre { font-size: 11px; margin-bottom: 8px; }
-  hr { border: none; border-top: 1px dashed #000; margin: 8px 0; }
+  .logo { max-width: 65mm; max-height: 32mm; margin-bottom: 6px; }
+  h1 { font-size: 20px; margin: 0 0 2px 0; font-weight: 900; letter-spacing: 1.5px; }
+  .sous-titre { font-size: 11px; margin-bottom: 8px; font-weight: bold; }
+  hr { border: none; border-top: 2px dashed #000; margin: 8px 0; }
   table { width: 100%; border-collapse: collapse; }
   td { padding: 1px 0; vertical-align: top; }
   .designation { font-weight: bold; padding-top: 4px; }
-  .montant { text-align: right; }
+  .montant { text-align: right; font-weight: bold; }
   .ligne-total { display: flex; justify-content: space-between; margin: 2px 0; }
-  .total-final { font-weight: bold; font-size: 14px; margin-top: 6px; }
-  .pied { text-align: center; margin-top: 12px; font-size: 11px; }
-  .coordonnees { text-align: center; margin-top: 4px; font-size: 10px; line-height: 1.5; }
+  .total-final { font-weight: 900; font-size: 15px; margin-top: 6px; border-top: 1px solid #000; padding-top: 4px; }
+  .pied { text-align: center; margin-top: 12px; font-size: 12px; font-weight: bold; }
+  .coordonnees { text-align: center; margin-top: 4px; font-size: 10px; line-height: 1.6; font-weight: bold; }
 </style>
 </head>
 <body>
   <div class="centre">
     <img src="${logoUrl}" class="logo" alt="Jesma U" onerror="this.style.display='none'">
     <h1>JESMA U</h1>
+    <div class="sous-titre">Grand-Bassam, carrefour rosier 5</div>
     <div class="sous-titre">${lieuNom || ''}</div>
     <div>${dateTexte} — ${heureTexte}</div>
     <div>Ticket ${vente.numero}</div>
@@ -98,6 +88,7 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   <hr>
   <div class="pied">Merci de votre visite !</div>
   <div class="coordonnees">
+    L'art d'accueillir la vie et de l'entretenir<br>
     Grand-Bassam, carrefour rosier 5<br>
     WhatsApp +225 07 69 535 786
   </div>
@@ -121,9 +112,14 @@ export default function Ventes() {
   const [ongletActif, setOngletActif] = useState('nouvelle');
 
   const [panier, setPanier] = useState([]);
+  const [filtrePanier, setFiltrePanier] = useState('');
+  const finPanierRef = useRef(null);
+  const champRechercheRef = useRef(null);
+  const minuteurScanRef = useRef(null);
   const [recherche, setRecherche] = useState('');
   const [resultats, setResultats] = useState([]);
   const [erreurRecherche, setErreurRecherche] = useState('');
+  const [avertissementStock, setAvertissementStock] = useState('');
   const [rechercheEnCours, setRechercheEnCours] = useState(false);
   const [remiseMontant, setRemiseMontant] = useState('');
   const [motifRemise, setMotifRemise] = useState('');
@@ -154,6 +150,19 @@ export default function Ventes() {
   const [carteCadeauVerifiee, setCarteCadeauVerifiee] = useState(null);
   const [carteCadeauVerificationEnCours, setCarteCadeauVerificationEnCours] = useState(false);
   const [erreurCarteCadeau, setErreurCarteCadeau] = useState('');
+
+  // --- Création rapide d'un client depuis l'écran de vente ---
+  const [creationClientOuverte, setCreationClientOuverte] = useState(false);
+  const [nomNouveauClient, setNomNouveauClient] = useState('');
+  const [telephoneNouveauClient, setTelephoneNouveauClient] = useState('');
+  const [erreurNouveauClient, setErreurNouveauClient] = useState('');
+  const [creationClientEnCours, setCreationClientEnCours] = useState(false);
+
+  // --- Facture pro forma chargée pour reprendre directement une vente préparée ---
+  const [numeroProForma, setNumeroProForma] = useState('');
+  const [proFormaChargee, setProFormaChargee] = useState(null);
+  const [proFormaChargementEnCours, setProFormaChargementEnCours] = useState(false);
+  const [erreurProForma, setErreurProForma] = useState('');
 
   const [venteEnCours, setVenteEnCours] = useState(false);
   const [erreurVente, setErreurVente] = useState('');
@@ -202,8 +211,45 @@ export default function Ventes() {
   useEffect(() => {
     appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
     appelApi('GET', '/clients').then(setClients).catch(() => {});
-    setVentesEnAttente(chargerVentesEnAttente());
+    chargerVentesEnAttenteServeur();
   }, []);
+
+  function chargerVentesEnAttenteServeur() {
+    appelApi('GET', '/ventes/en-attente').then(setVentesEnAttente).catch(() => {});
+  }
+
+  // Diffuse en temps réel vers l'écran client (double écran caisse) : panier, remise,
+  // et progression vers le cadeau fidélité du client sélectionné (10 achats consécutifs
+  // ≥20 000 F). Cette diffusion n'était jamais branchée jusqu'ici — l'écran client ne
+  // montrait donc jamais le panier en cours, seulement l'écran de remerciement final.
+  useEffect(() => {
+    const clientActuel = clients.find((c) => String(c.id) === String(clientId));
+    const achatsRestants = clientActuel && !clientActuel.estComptoir
+      ? Math.max(0, 10 - (clientActuel.achatsConsecutifs || 0))
+      : null;
+    diffuserEtatPanier({ panier, remise: Math.min(Number(remiseMontant) || 0, panier.reduce((s, l) => s + l.prixUnitaire * l.quantite, 0)), achatsRestantsFidelite: achatsRestants });
+  }, [panier, remiseMontant, clientId, clients]);
+
+  useEffect(() => {
+    return ecouterCanal((message) => {
+      if (message.type === 'DEMANDE_ETAT') {
+        const clientActuel = clients.find((c) => String(c.id) === String(clientId));
+        const achatsRestants = clientActuel && !clientActuel.estComptoir
+          ? Math.max(0, 10 - (clientActuel.achatsConsecutifs || 0))
+          : null;
+        diffuserEtatPanier({ panier, remise: Math.min(Number(remiseMontant) || 0, panier.reduce((s, l) => s + l.prixUnitaire * l.quantite, 0)), achatsRestantsFidelite: achatsRestants });
+      }
+    });
+  }, [panier, remiseMontant, clientId, clients]);
+
+  // Fait défiler automatiquement le panier jusqu'au dernier article ajouté/modifié —
+  // sans ça, une longue liste oblige à scroller à la main pour voir/ajuster la dernière
+  // ligne qu'on vient de scanner.
+  useEffect(() => {
+    if (finPanierRef.current) {
+      finPanierRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [panier.length]);
 
   // Si on arrive depuis la fiche d'un client fraîchement créé (?clientId=123), on le
   // présélectionne automatiquement dès que la liste des clients est chargée, puis on
@@ -365,6 +411,75 @@ export default function Ventes() {
     setCodeCarteCadeau('');
     setCarteCadeauVerifiee(null);
     setErreurCarteCadeau('');
+  }
+
+  async function chargerProForma() {
+    const numero = numeroProForma.trim();
+    if (!numero) return;
+    setErreurProForma('');
+    setProFormaChargementEnCours(true);
+    try {
+      const proForma = await appelApi('GET', `/proforma/${encodeURIComponent(numero)}`);
+      if (proForma.statut !== 'EN_ATTENTE') {
+        setErreurProForma(
+          proForma.statut === 'UTILISEE'
+            ? 'Cette facture pro forma a déjà été transformée en vente.'
+            : 'Cette facture pro forma a été annulée.'
+        );
+        return;
+      }
+      setPanier(
+        proForma.lignes.map((l) => ({
+          articleId: l.articleId,
+          designation: l.article.designation,
+          prixUnitaire: Number(l.prixUnitaire),
+          quantite: l.quantite,
+          stockDispo: l.article.stockActuel,
+          photoUrl: l.article.photoUrl || null,
+        }))
+      );
+      setClientId(String(proForma.clientId));
+      setProFormaChargee(proForma);
+    } catch (err) {
+      setErreurProForma(err.message);
+    } finally {
+      setProFormaChargementEnCours(false);
+    }
+  }
+
+  function retirerProForma() {
+    setNumeroProForma('');
+    setProFormaChargee(null);
+    setErreurProForma('');
+  }
+
+  async function creerClientRapide() {
+    setErreurNouveauClient('');
+    if (!nomNouveauClient.trim()) {
+      setErreurNouveauClient('Le nom complet est requis.');
+      return;
+    }
+    if (!telephoneNouveauClient.trim()) {
+      setErreurNouveauClient('Le téléphone est requis.');
+      return;
+    }
+    setCreationClientEnCours(true);
+    try {
+      const client = await appelApi('POST', '/clients', {
+        nomComplet: nomNouveauClient.trim(),
+        telephone: telephoneNouveauClient.trim(),
+      });
+      setClients((prec) => [...prec, client]);
+      setClientId(String(client.id));
+      setClientSearch('');
+      setCreationClientOuverte(false);
+      setNomNouveauClient('');
+      setTelephoneNouveauClient('');
+    } catch (err) {
+      setErreurNouveauClient(err.message);
+    } finally {
+      setCreationClientEnCours(false);
+    }
   }
 
   async function gererRechercheRetour(e) {
@@ -529,13 +644,8 @@ export default function Ventes() {
     }
   }
 
-  function sauvegarderListeAttente(liste) {
-    setVentesEnAttente(liste);
-    localStorage.setItem(CLE_STOCKAGE_ATTENTE, JSON.stringify(liste));
-  }
-
   async function gererRecherche(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     const q = recherche.trim();
     if (!q) return;
 
@@ -548,6 +658,7 @@ export default function Ventes() {
         ajouterAuPanier(reponse.resultats[0]);
         setResultats([]);
         setRecherche('');
+        champRechercheRef.current?.focus();
       } else {
         setResultats(reponse.resultats);
       }
@@ -558,13 +669,36 @@ export default function Ventes() {
     }
   }
 
+  // Un scanner de code-barres "tape" très vite puis n'appuie pas toujours sur Entrée
+  // selon le modèle — on détecte donc une frappe rapide et longue (typique d'un scan)
+  // pour lancer la recherche automatiquement, sans clic ni Entrée nécessaires.
+  function gererSaisieRecherche(valeur) {
+    setRecherche(valeur);
+    if (minuteurScanRef.current) clearTimeout(minuteurScanRef.current);
+    if (valeur.trim().length >= 6) {
+      minuteurScanRef.current = setTimeout(() => {
+        gererRecherche();
+      }, 120);
+    }
+  }
+
   function ajouterAuPanier(article) {
+    const stockDispo = article.stockLieu ?? article.stockActuel;
+    setAvertissementStock('');
     setPanier((prec) => {
       const existant = prec.find((l) => l.articleId === article.id);
       if (existant) {
+        if (stockDispo != null && existant.quantite >= stockDispo) {
+          setAvertissementStock(`Stock épuisé pour "${article.designation}" (${stockDispo} disponible(s)).`);
+          return prec;
+        }
         return prec.map((l) =>
           l.articleId === article.id ? { ...l, quantite: l.quantite + 1 } : l
         );
+      }
+      if (stockDispo != null && stockDispo <= 0) {
+        setAvertissementStock(`"${article.designation}" n'a plus de stock disponible.`);
+        return prec;
       }
       return [
         ...prec,
@@ -573,7 +707,7 @@ export default function Ventes() {
           designation: article.designation,
           prixUnitaire: Number(article.prixVente),
           quantite: 1,
-          stockDispo: article.stockLieu ?? article.stockActuel,
+          stockDispo,
           photoUrl: article.photoUrl || null,
         },
       ];
@@ -581,11 +715,17 @@ export default function Ventes() {
   }
 
   function changerQuantite(articleId, delta) {
+    setAvertissementStock('');
     setPanier((prec) =>
       prec
-        .map((l) =>
-          l.articleId === articleId ? { ...l, quantite: Math.max(0, l.quantite + delta) } : l
-        )
+        .map((l) => {
+          if (l.articleId !== articleId) return l;
+          if (delta > 0 && l.stockDispo != null && l.quantite >= l.stockDispo) {
+            setAvertissementStock(`Stock épuisé pour "${l.designation}" (${l.stockDispo} disponible(s)).`);
+            return l;
+          }
+          return { ...l, quantite: Math.max(0, l.quantite + delta) };
+        })
         .filter((l) => l.quantite > 0)
     );
   }
@@ -598,19 +738,24 @@ export default function Ventes() {
     ajouterAuPanier(article);
     setResultats([]);
     setRecherche('');
+    champRechercheRef.current?.focus();
   }
 
   function reinitialiserVente() {
     setPanier([]);
+    setFiltrePanier('');
+    setAvertissementStock('');
     setRemiseMontant('');
     setMotifRemise('');
     setClientId('');
     setClientSearch('');
+    setCreationClientOuverte(false);
     setPaiements([]);
     setMontantAAjouter('');
     setTypeVente('Comptant');
     retirerAvoir();
     retirerCarteCadeau();
+    retirerProForma();
   }
 
   // Le client se désiste avant paiement : on vide le panier en cours sans rien
@@ -655,49 +800,58 @@ export default function Ventes() {
     setPaiements((prec) => prec.filter((_, i) => i !== index));
   }
 
-  function mettreEnAttente() {
+  async function mettreEnAttente() {
     setErreurVente('');
     if (panier.length === 0) {
       setErreurVente('Le panier est vide, rien à mettre en attente.');
       return;
     }
 
-    const venteSuspendue = {
-      id: Date.now(),
-      createdAt: new Date().toISOString(),
-      panier,
-      remiseMontant,
-      motifRemise,
-      lieuId,
-      vendeurId,
-      clientId,
-      typeVente,
-    };
-
-    sauvegarderListeAttente([venteSuspendue, ...ventesEnAttente]);
-    reinitialiserVente();
-    setConfirmation(null);
+    try {
+      await appelApi('POST', '/ventes/en-attente', {
+        lieuId: lieuId || undefined,
+        vendeurId: vendeurId || undefined,
+        clientId: clientId || undefined,
+        typeVente,
+        remiseMontant: remiseMontant || undefined,
+        motifRemise: motifRemise || undefined,
+        panier,
+      });
+      chargerVentesEnAttenteServeur();
+      reinitialiserVente();
+      setConfirmation(null);
+    } catch (err) {
+      setErreurVente(err.message);
+    }
   }
 
-  function reprendreVente(id) {
+  async function reprendreVente(id) {
     const vente = ventesEnAttente.find((v) => v.id === id);
     if (!vente) return;
 
     setPanier(vente.panier);
-    setRemiseMontant(vente.remiseMontant);
-    setMotifRemise(vente.motifRemise);
-    setLieuId(vente.lieuId);
-    setVendeurId(vente.vendeurId);
+    setRemiseMontant(vente.remiseMontant || '');
+    setMotifRemise(vente.motifRemise || '');
+    setLieuId(vente.lieuId || '');
+    setVendeurId(vente.vendeurId || '');
     setClientId(vente.clientId || '');
-    setTypeVente(vente.typeVente);
+    setTypeVente(vente.typeVente || 'Comptant');
     setPaiements([]);
 
-    sauvegarderListeAttente(ventesEnAttente.filter((v) => v.id !== id));
+    try {
+      await appelApi('DELETE', `/ventes/en-attente/${id}`);
+    } catch { /* la reprise se fait quand même côté écran */ }
+    chargerVentesEnAttenteServeur();
     setOngletActif('nouvelle');
   }
 
-  function supprimerVenteEnAttente(id) {
-    sauvegarderListeAttente(ventesEnAttente.filter((v) => v.id !== id));
+  async function supprimerVenteEnAttente(id) {
+    try {
+      await appelApi('DELETE', `/ventes/en-attente/${id}`);
+      chargerVentesEnAttenteServeur();
+    } catch (err) {
+      setErreurVente(err.message);
+    }
   }
 
   async function validerVente() {
@@ -741,8 +895,9 @@ export default function Ventes() {
     }
 
     setVenteEnCours(true);
+    let vente;
     try {
-      const vente = await appelApi('POST', '/ventes', {
+      vente = await appelApi('POST', '/ventes', {
         lieuId: Number(lieuId),
         vendeurId: vendeurId ? Number(vendeurId) : null,
         clientId: idClientFinal,
@@ -751,6 +906,7 @@ export default function Ventes() {
         motifRemise: motifRemise || undefined,
         avoirCode: avoirVerifie ? avoirVerifie.reference : undefined,
         carteCadeauCode: carteCadeauVerifiee ? carteCadeauVerifiee.codeBarre : undefined,
+        proFormaId: proFormaChargee ? proFormaChargee.id : undefined,
         lignes: panier.map((l) => ({
           articleId: l.articleId,
           quantite: l.quantite,
@@ -758,7 +914,20 @@ export default function Ventes() {
         })),
         paiements: paiements.map((p) => ({ mode: p.mode, montant: p.montant })),
       });
+    } catch (err) {
+      // Échec réel côté serveur (stock refusé, avoir invalide, etc.) — rien n'a été
+      // créé, donc on affiche l'erreur normalement et la caissière peut corriger/réessayer.
+      setErreurVente(err.message);
+      setVenteEnCours(false);
+      return;
+    }
 
+    // À partir d'ici, la vente est enregistrée en base et le stock déjà décompté —
+    // quoi qu'il arrive dans le bloc suivant (ticket, écran client), il ne faut plus
+    // jamais laisser croire à un échec qui pousserait à revalider (double décompte de
+    // stock). On vide donc TOUJOURS le panier, et on affiche un message dédié si
+    // uniquement l'affichage a un souci.
+    try {
       const lieuNom = lieux.find((l) => String(l.id) === String(lieuId))?.nom;
       const vendeurNom = vendeurs.find((v) => String(v.id) === String(vendeurId))?.nomComplet;
       const ticketHtml = construireTicketHtml({
@@ -778,13 +947,13 @@ export default function Ventes() {
       });
       setDernierTicketHtml(ticketHtml);
       imprimerTicketDepuisHtml(ticketHtml);
-
       setConfirmation({ ...vente, montantRestantAffiche: estCredit ? resteAPayer : 0 });
       diffuserVenteValidee(vente);
-      reinitialiserVente();
-    } catch (err) {
-      setErreurVente(err.message);
+    } catch {
+      setConfirmation({ ...vente, montantRestantAffiche: estCredit ? resteAPayer : 0 });
+      setErreurVente("La vente est bien enregistrée, mais le ticket ou l'écran client n'a pas pu s'afficher correctement.");
     } finally {
+      reinitialiserVente();
       setVenteEnCours(false);
     }
   }
@@ -1317,11 +1486,41 @@ export default function Ventes() {
                         ).length === 0 && (
                           <div style={{ padding: '8px 10px', fontSize: 13, color: 'var(--brown-soft)' }}>
                             Aucun client trouvé.
+                            <button
+                              type="button"
+                              onClick={() => { setCreationClientOuverte(true); setNomNouveauClient(clientSearch); }}
+                              style={{ ...styles.boutonAjouterPaiement, marginLeft: 8 }}
+                            >
+                              + Créer
+                            </button>
                           </div>
                         )}
                       </div>
                     )}
                   </>
+                )}
+                {creationClientOuverte && (
+                  <div style={{ ...styles.lignePaiement, flexDirection: 'column', alignItems: 'stretch', gap: 6, background: 'var(--cream)' }}>
+                    <input
+                      style={styles.champInput}
+                      placeholder="Nom complet *"
+                      value={nomNouveauClient}
+                      onChange={(e) => setNomNouveauClient(e.target.value)}
+                    />
+                    <input
+                      style={styles.champInput}
+                      placeholder="Téléphone *"
+                      value={telephoneNouveauClient}
+                      onChange={(e) => setTelephoneNouveauClient(e.target.value)}
+                    />
+                    {erreurNouveauClient && <p style={{ color: 'var(--error)', fontSize: 12 }}>{erreurNouveauClient}</p>}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button type="button" onClick={() => setCreationClientOuverte(false)} style={styles.boutonRetirer}>Annuler</button>
+                      <button type="button" onClick={creerClientRapide} disabled={creationClientEnCours} style={styles.boutonAjouterPaiement}>
+                        {creationClientEnCours ? '…' : 'Créer et sélectionner'}
+                      </button>
+                    </div>
+                  </div>
                 )}
                 <p style={{ ...styles.texteMuet, marginTop: 4 }}>
                   Laissé vide, la vente est associée à "Client Comptoir".
@@ -1386,6 +1585,35 @@ export default function Ventes() {
                 </label>
                 {erreurCarteCadeau && <p style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>{erreurCarteCadeau}</p>}
               </div>
+
+              <div style={{ maxWidth: 340 }}>
+                <label style={styles.champLabel}>
+                  Charger une facture pro forma (optionnel)
+                  {!proFormaChargee ? (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        style={styles.champInput}
+                        placeholder="Ex: PF-1234567890"
+                        value={numeroProForma}
+                        onChange={(e) => setNumeroProForma(e.target.value)}
+                      />
+                      <button
+                        onClick={chargerProForma}
+                        disabled={proFormaChargementEnCours || !numeroProForma.trim()}
+                        style={styles.boutonAjouterPaiement}
+                      >
+                        {proFormaChargementEnCours ? '…' : 'Charger'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ ...styles.lignePaiement, background: '#DFF3E3' }}>
+                      <span>Pro forma {proFormaChargee.numero} chargée ({proFormaChargee.lignes.length} article(s))</span>
+                      <button onClick={retirerProForma} style={styles.boutonRetirer}>✕</button>
+                    </div>
+                  )}
+                </label>
+                {erreurProForma && <p style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>{erreurProForma}</p>}
+              </div>
             </div>
 
             {confirmation && (
@@ -1411,11 +1639,12 @@ export default function Ventes() {
                 <h3 style={styles.titreBloc}>Ajouter un article</h3>
                 <form onSubmit={gererRecherche} style={styles.formRecherche}>
                   <input
+                    ref={champRechercheRef}
                     autoFocus
                     style={styles.champInput}
                     placeholder="Scanner ou taper un nom/code…"
                     value={recherche}
-                    onChange={(e) => setRecherche(e.target.value)}
+                    onChange={(e) => gererSaisieRecherche(e.target.value)}
                   />
                   <button type="submit" style={styles.boutonRecherche} disabled={rechercheEnCours}>
                     {rechercheEnCours ? '…' : 'Chercher'}
@@ -1453,8 +1682,26 @@ export default function Ventes() {
               <div style={styles.colonnePanier}>
                 <h3 style={styles.titreBloc}>Panier</h3>
                 {panier.length === 0 && <p style={styles.texteMuet}>Aucun article ajouté.</p>}
-                {panier.map((ligne) => {
+                {avertissementStock && (
+                  <div style={{ ...styles.bandeauErreur, marginBottom: 8 }}>{avertissementStock}</div>
+                )}
+                {panier.length > 4 && (
+                  <input
+                    style={{ ...styles.champInput, marginBottom: 8 }}
+                    placeholder="Retrouver un article du panier par nom…"
+                    value={filtrePanier}
+                    onChange={(e) => setFiltrePanier(e.target.value)}
+                  />
+                )}
+                {panier
+                  .filter((ligne) => {
+                    const f = filtrePanier.trim().toLowerCase();
+                    if (!f) return true;
+                    return ligne.designation.toLowerCase().includes(f);
+                  })
+                  .map((ligne) => {
                   const stockRestant = ligne.stockDispo != null ? ligne.stockDispo - ligne.quantite : null;
+                  const stockEpuise = ligne.stockDispo != null && ligne.quantite >= ligne.stockDispo;
                   return (
                     <div key={ligne.articleId} style={styles.ligneAmpanier}>
                       <div style={{ flex: 1 }}>
@@ -1471,12 +1718,19 @@ export default function Ventes() {
                       <div style={styles.controlesQuantite}>
                         <button onClick={() => changerQuantite(ligne.articleId, -1)} style={styles.boutonQte}>−</button>
                         <span>{ligne.quantite}</span>
-                        <button onClick={() => changerQuantite(ligne.articleId, 1)} style={styles.boutonQte}>+</button>
+                        <button
+                          onClick={() => changerQuantite(ligne.articleId, 1)}
+                          disabled={stockEpuise}
+                          style={{ ...styles.boutonQte, opacity: stockEpuise ? 0.4 : 1, cursor: stockEpuise ? 'not-allowed' : 'pointer' }}
+                        >
+                          +
+                        </button>
                       </div>
                       <button onClick={() => retirerDuPanier(ligne.articleId)} style={styles.boutonRetirer}>✕</button>
                     </div>
                   );
                 })}
+                <div ref={finPanierRef} />
 
                 <div style={styles.blocRemise}>
                   <label style={styles.champLabel}>

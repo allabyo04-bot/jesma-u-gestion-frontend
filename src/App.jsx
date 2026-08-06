@@ -14,6 +14,7 @@ import Roles from './pages/Roles.jsx';
 import Depenses from './pages/Depenses.jsx';
 import Clients from './pages/Clients';
 import Parametres from './pages/Parametres.jsx';
+import ProForma from './pages/ProForma.jsx';
 
 function estConnecte() {
   return !!localStorage.getItem('jesma_token');
@@ -117,6 +118,14 @@ export default function App() {
       />
       <Route path="/liste-cadeau/:codeAcces" element={<ListeCadeauPublique />} />
       <Route path="/ecran-client" element={<EcranClient />} />
+      <Route
+        path="/proforma"
+        element={
+          <RouteProtegee>
+            <ProForma />
+          </RouteProtegee>
+        }
+      />
       <Route
   path="/clients"
   element={

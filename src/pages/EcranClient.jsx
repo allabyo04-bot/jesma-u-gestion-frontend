@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ecouterCanal, demanderEtatActuel } from '../lib/broadcast';
 
 // Écran destiné à faire face au client sur la borne double écran. Ne fait qu'afficher —
@@ -7,6 +7,7 @@ import { ecouterCanal, demanderEtatActuel } from '../lib/broadcast';
 export default function EcranClient() {
   const [etat, setEtat] = useState(null);
   const [venteValidee, setVenteValidee] = useState(null);
+  const finListeRef = useRef(null);
 
   useEffect(() => {
     const arreterEcoute = ecouterCanal((message) => {
@@ -21,6 +22,15 @@ export default function EcranClient() {
     demanderEtatActuel();
     return arreterEcoute;
   }, []);
+
+  // Le client ne peut pas interagir avec cet écran (pas de souris/tactile) : dès
+  // qu'un nouvel article est ajouté, on fait défiler automatiquement pour qu'il
+  // reste visible, sans quoi il disparaîtrait tout en bas d'une longue liste.
+  useEffect(() => {
+    if (finListeRef.current) {
+      finListeRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [etat?.panier]);
 
   if (venteValidee) {
     return (
@@ -50,10 +60,20 @@ export default function EcranClient() {
       {panier.length === 0 ? (
         <div style={styles.attenteVide}>
           <p style={styles.texteAttente}>Bienvenue chez Jesma U</p>
-          <p style={styles.sousTexteAttente}>La gestion de votre boutique, avec la douceur de Jesma U.</p>
+          <p style={styles.sousTexteAttente}>L'art d'accueillir la vie et de l'entretenir</p>
         </div>
       ) : (
         <>
+          {etat?.achatsRestantsFidelite != null && etat.achatsRestantsFidelite > 1 && (
+            <div style={styles.bandeauFidelite}>
+              🎁 Encore {etat.achatsRestantsFidelite} achats de plus de 20 000 F pour votre cadeau fidélité !
+            </div>
+          )}
+          {etat?.achatsRestantsFidelite === 1 && (
+            <div style={styles.bandeauFidelite}>
+              🎉 Ce 10ème achat vous donne droit à votre cadeau fidélité !
+            </div>
+          )}
           <div style={styles.listeArticles}>
             {panier.map((ligne) => (
               <div key={ligne.articleId} style={styles.carteArticle}>
@@ -73,6 +93,7 @@ export default function EcranClient() {
                 </div>
               </div>
             ))}
+            <div ref={finListeRef} />
           </div>
 
           <footer style={styles.piedTotal}>
@@ -113,6 +134,7 @@ const styles = {
   texteAttente: { fontFamily: 'var(--font-display)', fontSize: 36, margin: 0, color: 'var(--gold-deep)' },
   sousTexteAttente: { fontSize: 16, color: 'var(--brown-soft)', marginTop: 12 },
   listeArticles: { flex: 1, overflowY: 'auto', padding: '20px 32px', display: 'flex', flexDirection: 'column', gap: 14 },
+  bandeauFidelite: { margin: '16px 32px 0', padding: '14px 20px', borderRadius: 12, background: 'var(--gold-deep)', color: 'var(--white)', fontSize: 16, fontWeight: 700, textAlign: 'center' },
   carteArticle: {
     display: 'flex', alignItems: 'center', gap: 16, background: 'var(--white)',
     borderRadius: 14, padding: 14, boxShadow: '0 2px 8px rgba(74,44,23,0.1)',

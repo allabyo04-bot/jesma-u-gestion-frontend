@@ -126,6 +126,27 @@ function OngletLieux() {
                     <strong>{l.nom}</strong>
                     <span style={styles.texteMuet}> — {l.type === 'ENTREPOT' ? 'Entrepôt' : 'Boutique'}</span>
                   </span>
+                  {l.type === 'BOUTIQUE' && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--brown-soft)' }}>
+                      Objectif/mois
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        defaultValue={l.objectifMensuel}
+                        onBlur={(e) => {
+                          const valeur = Number(e.target.value);
+                          if (!Number.isNaN(valeur) && valeur !== l.objectifMensuel) {
+                            appelApi('PUT', `/stock/lieux/${l.id}`, { objectifMensuel: valeur })
+                              .then(chargerLieux)
+                              .catch((err) => setErreur(err.message));
+                          }
+                        }}
+                        style={{ ...styles.champInput, width: 130 }}
+                      />
+                      F
+                    </label>
+                  )}
                   <button onClick={() => ouvrirEdition(l)} style={styles.boutonModifier}>✏️</button>
                   <button onClick={() => desactiverLieu(l)} style={styles.boutonRetirer}>Désactiver</button>
                 </>

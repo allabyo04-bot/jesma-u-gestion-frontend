@@ -42,17 +42,12 @@
 }
 
 .brand-mark .u-badge {
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, var(--gold-light), var(--gold-deep));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 6px rgba(46, 26, 13, 0.25);
+  object-fit: cover;
+  box-shadow: 0 2px 8px rgba(46, 26, 13, 0.3);
 }
-
-.brand-mark .u-badge svg { width: 20px; height: 20px; }
 
 .brand-mark .wordmark {
   font-family: var(--font-display);
@@ -68,19 +63,15 @@
   max-width: 360px;
 }
 
-.brand-copy h1 {
+.brand-copy .tagline {
   font-family: var(--font-display);
-  font-size: 34px;
-  line-height: 1.25;
-  margin: 0 0 12px;
+  font-size: 17px;
+  font-weight: 600;
   color: var(--brown-deep);
-}
-
-.brand-copy p {
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--brown-ink);
-  margin: 0;
+  background: var(--white);
+  display: inline-block;
+  padding: 5px 14px;
+  border-radius: 20px;
 }
 
 .brand-illustration {

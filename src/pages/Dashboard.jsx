@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { appelApi, clearSession, getUtilisateur } from '../lib/api';
+import BandeauPhotosProduits from '../components/BandeauPhotosProduits';
 
 const LIENS = [
   { id: 'ventes', label: 'Ventes', chemin: '/ventes', adminSeulement: false },
@@ -11,6 +12,7 @@ const LIENS = [
   { id: 'cartes-cadeaux', label: 'Cartes cadeaux', chemin: '/cartes-cadeaux', adminSeulement: false },
   { id: 'depenses', label: 'Dépenses', chemin: '/depenses', adminSeulement: false },
   { id: 'listes-cadeaux', label: 'Listes cadeaux', chemin: '/listes-cadeaux', adminSeulement: false },
+  { id: 'proforma', label: 'Factures pro forma', chemin: '/proforma', adminSeulement: false },
   { id: 'utilisateurs', label: 'Utilisateurs', chemin: '/utilisateurs', adminSeulement: true },
   { id: 'roles', label: 'Rôles', chemin: '/roles', adminSeulement: true },
   { id: 'parametres', label: 'Paramètres', chemin: '/parametres', adminSeulement: true },
@@ -22,11 +24,13 @@ export default function Dashboard() {
   const estAdmin = utilisateur?.role === 'ADMIN';
   const [dashboard, setDashboard] = useState(null);
   const [erreur, setErreur] = useState('');
+  const [articles, setArticles] = useState([]);
 
   useEffect(() => {
     appelApi('GET', '/dashboard')
       .then(setDashboard)
       .catch((err) => setErreur(err.message));
+    appelApi('GET', '/articles').then(setArticles).catch(() => {});
   }, []);
 
   function deconnexion() {
@@ -57,6 +61,8 @@ export default function Dashboard() {
       <main style={styles.contenu}>
         <h1 style={styles.titre}>Bonjour, {utilisateur?.nomComplet || 'Victoria'} 👋</h1>
 
+        <BandeauPhotosProduits articles={articles} hauteur={110} />
+
         {erreur && <p style={{ color: '#B23A2E' }}>{erreur}</p>}
 
         {dashboard && (
@@ -74,6 +80,78 @@ export default function Dashboard() {
               <div style={{ fontSize: 13, opacity: 0.7 }}>Demandes de remise</div>
               <div style={{ fontSize: 24, fontWeight: 700 }}>{dashboard.demandesRemiseEnAttente}</div>
             </div>
+            <div
+              style={{ background: '#FBF3DD', padding: 20, borderRadius: 12, cursor: 'pointer' }}
+              onClick={() => navigate('/listes-cadeaux')}
+            >
+              <div style={{ fontSize: 13, opacity: 0.7 }}>Listes cadeaux</div>
+              <div style={{ fontSize: 24, fontWeight: 700 }}>{dashboard.listesCadeaux.listesActives} active(s)</div>
+              <div style={{ fontSize: 12, opacity: 0.6 }}>
+                {dashboard.listesCadeaux.offresEnAttente > 0
+                  ? `⚠ ${dashboard.listesCadeaux.offresEnAttente} offre(s) à valider`
+                  : 'Aucune offre en attente'}
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.6 }}>
+                {dashboard.listesCadeaux.totalOfferConfirme.toLocaleString('fr-FR')} F offerts au total
+              </div>
+            </div>
+            {estAdmin && (
+              <>
+                <div style={{ background: '#FBF3DD', padding: 20, borderRadius: 12 }}>
+                  <div style={{ fontSize: 13, opacity: 0.7 }}>Remises du jour</div>
+                  <div style={{ fontSize: 24, fontWeight: 700 }}>{dashboard.remises.jour.total.toLocaleString('fr-FR')} F</div>
+                  <div style={{ fontSize: 12, opacity: 0.6 }}>{dashboard.remises.jour.nombre} vente(s) remisée(s)</div>
+                </div>
+                <div style={{ background: '#FBF3DD', padding: 20, borderRadius: 12 }}>
+                  <div style={{ fontSize: 13, opacity: 0.7 }}>Remises du mois en cours</div>
+                  <div style={{ fontSize: 24, fontWeight: 700 }}>{dashboard.remises.mois.total.toLocaleString('fr-FR')} F</div>
+                  <div style={{ fontSize: 12, opacity: 0.6 }}>{dashboard.remises.mois.nombre} vente(s) remisée(s)</div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {dashboard && estAdmin && dashboard.parBoutique.length > 0 && (
+          <div style={{ marginTop: 32, maxWidth: 800 }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
+              Objectif du mois par boutique
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {dashboard.parBoutique.map((b) => (
+                <div key={b.lieuId} style={{ background: '#FBF3DD', padding: 20, borderRadius: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                    <span style={{ fontWeight: 700, fontFamily: 'var(--font-display)' }}>{b.nom}</span>
+                    <span style={{ fontSize: 13, opacity: 0.7 }}>
+                      {b.ventesMois.toLocaleString('fr-FR')} F / {b.objectifMensuel.toLocaleString('fr-FR')} F ({b.pourcentageObjectif}%)
+                    </span>
+                  </div>
+                  <div style={{ background: 'var(--cream)', borderRadius: 8, height: 14, overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${Math.min(100, b.pourcentageObjectif)}%`,
+                        height: '100%',
+                        background: b.pourcentageObjectif >= 100 ? '#1E6B36' : 'var(--gold-deep)',
+                        transition: 'width 0.3s',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: 20, marginTop: 10, fontSize: 13, opacity: 0.8, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700 }}>
+                      Ventes du jour : {b.ventesJour.total.toLocaleString('fr-FR')} F ({b.ventesJour.nombre} vente(s))
+                    </span>
+                    <span>Coût d'achat (mois) : {b.coutMarchandiseMois.toLocaleString('fr-FR')} F</span>
+                    <span>Dépenses (mois) : {b.depensesMois.toLocaleString('fr-FR')} F</span>
+                    <span style={{ fontWeight: 700, color: b.margeMois >= 0 ? '#1E6B36' : 'var(--error)' }}>
+                      Marge nette du mois : {b.margeMois.toLocaleString('fr-FR')} F
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 12, opacity: 0.6, marginTop: 10 }}>
+              L'objectif de chaque boutique se règle dans Paramètres → Lieux.
+            </p>
           </div>
         )}
 

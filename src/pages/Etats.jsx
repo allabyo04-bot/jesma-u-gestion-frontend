@@ -80,6 +80,7 @@ export default function Etats() {
     { id: 'type', label: 'Par type' },
     { id: 'vendeur', label: 'Meilleur vendeur' },
     ...(estAdmin ? [{ id: 'boutique', label: 'Récap boutiques' }] : []),
+    ...(estAdmin ? [{ id: 'remises', label: 'Demandes de remise' }] : []),
     ...(estAdmin ? [{ id: 'journal', label: "Journal d'activité" }] : []),
     { id: 'fermeture', label: 'Fermeture de caisse' },
     { id: 'fidelite', label: 'Récompenses fidélité' },
@@ -147,7 +148,7 @@ export default function Etats() {
   }
 
   async function chargerOnglet() {
-    if (ongletActif === 'fermeture' || ongletActif === 'fidelite' || ongletActif === 'journal' || ongletActif === 'peremption') return;
+    if (ongletActif === 'fermeture' || ongletActif === 'fidelite' || ongletActif === 'journal' || ongletActif === 'peremption' || ongletActif === 'remises') return;
     // Compteur de requêtes : si une réponse plus ancienne arrive après une plus récente
     // (ex: clics rapides entre onglets), on l'ignore pour ne jamais afficher des données
     // qui ne correspondent pas à l'onglet actuellement affiché.
@@ -244,6 +245,39 @@ export default function Etats() {
   const [peremptionChargement, setPeremptionChargement] = useState(false);
   const [peremptionErreur, setPeremptionErreur] = useState('');
   const [peremptionJours, setPeremptionJours] = useState('60');
+
+  const [demandesRemise, setDemandesRemise] = useState([]);
+  const [remisesChargement, setRemisesChargement] = useState(false);
+  const [remisesErreur, setRemisesErreur] = useState('');
+  const [remisesFiltre, setRemisesFiltre] = useState('EN_ATTENTE');
+  const [remiseActionEnCours, setRemiseActionEnCours] = useState(null);
+
+  function chargerDemandesRemise() {
+    setRemisesChargement(true);
+    setRemisesErreur('');
+    const params = remisesFiltre ? `?statut=${remisesFiltre}` : '';
+    appelApi('GET', `/demandes-remise${params}`)
+      .then(setDemandesRemise)
+      .catch((err) => setRemisesErreur(err.message))
+      .finally(() => setRemisesChargement(false));
+  }
+
+  async function traiterDemandeRemise(id, action) {
+    setRemiseActionEnCours(id);
+    try {
+      await appelApi('POST', `/demandes-remise/${id}/${action}`);
+      chargerDemandesRemise();
+    } catch (err) {
+      setRemisesErreur(err.message);
+    } finally {
+      setRemiseActionEnCours(null);
+    }
+  }
+
+  useEffect(() => {
+    if (ongletActif === 'remises') chargerDemandesRemise();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ongletActif, remisesFiltre]);
 
   function chargerPeremption() {
     setPeremptionChargement(true);
@@ -359,6 +393,25 @@ export default function Etats() {
                 key={s.id || 'tous'}
                 onClick={() => setStatutFiltre(s.id)}
                 style={s.id === statutFiltre ? styles.filtreActif : styles.filtreInactif}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : ongletActif === 'remises' ? (
+        <div style={styles.blocFiltres}>
+          <div style={styles.raccourcis}>
+            {[
+              { id: 'EN_ATTENTE', label: 'En attente' },
+              { id: 'APPROUVEE', label: 'Approuvées' },
+              { id: 'REFUSEE', label: 'Refusées' },
+              { id: '', label: 'Toutes' },
+            ].map((s) => (
+              <button
+                key={s.id || 'toutes'}
+                onClick={() => setRemisesFiltre(s.id)}
+                style={s.id === remisesFiltre ? styles.filtreActif : styles.filtreInactif}
               >
                 {s.label}
               </button>
@@ -657,6 +710,54 @@ export default function Etats() {
                   {l.reference} — Quantité : {l.quantite} — {l.lieu || 'Lieu inconnu'} — Péremption le{' '}
                   {new Date(l.datePeremption).toLocaleDateString('fr-FR')}
                 </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : ongletActif === 'remises' ? (
+        <>
+          {remisesErreur && <div style={styles.bandeauErreur}>{remisesErreur}</div>}
+          {remisesChargement && <p style={styles.texteMuet}>Chargement…</p>}
+          {!remisesChargement && demandesRemise.length === 0 && (
+            <p style={styles.texteMuet}>Aucune demande de remise pour ce filtre.</p>
+          )}
+          <div style={styles.tableauWrapper}>
+            {demandesRemise.map((d) => (
+              <div key={d.id} style={styles.carteAttente}>
+                <div style={styles.enTeteCarteAttente}>
+                  <span style={{ fontWeight: 700 }}>
+                    {Number(d.montantDemande).toLocaleString('fr-FR')} F — Vente {d.vente?.numero || d.venteId}
+                  </span>
+                  <span style={styles.texteMuet}>
+                    {new Date(d.createdAt).toLocaleDateString('fr-FR')}{' '}
+                    {new Date(d.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div style={styles.texteMuet}>Demandée par {d.demandeur?.nomComplet || '—'}</div>
+                {d.motif && <div style={styles.texteMuet}>Motif : {d.motif}</div>}
+                {d.statut === 'EN_ATTENTE' ? (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button
+                      onClick={() => traiterDemandeRemise(d.id, 'approuver')}
+                      disabled={remiseActionEnCours === d.id}
+                      style={styles.filtreActif}
+                    >
+                      {remiseActionEnCours === d.id ? '…' : '✓ Approuver'}
+                    </button>
+                    <button
+                      onClick={() => traiterDemandeRemise(d.id, 'refuser')}
+                      disabled={remiseActionEnCours === d.id}
+                      style={styles.filtreInactif}
+                    >
+                      Refuser
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ fontWeight: 700, marginTop: 4, color: d.statut === 'APPROUVEE' ? '#1E6B36' : 'var(--error)' }}>
+                    {d.statut === 'APPROUVEE' ? 'Approuvée' : 'Refusée'}
+                    {d.approbateur && ` par ${d.approbateur.nomComplet}`}
+                  </div>
+                )}
               </div>
             ))}
           </div>

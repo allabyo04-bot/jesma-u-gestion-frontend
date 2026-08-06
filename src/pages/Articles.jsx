@@ -32,6 +32,133 @@ export default function Articles() {
   const [erreurReimpression, setErreurReimpression] = useState('');
   const [impressionReimpressionEnCours, setImpressionReimpressionEnCours] = useState(false);
 
+  // --- Déplacer plusieurs articles vers une (nouvelle ou existante) sous-famille ---
+  const [panneauDeplacementOuvert, setPanneauDeplacementOuvert] = useState(false);
+  const [rechercheDeplacement, setRechercheDeplacement] = useState('');
+  const [resultatsDeplacement, setResultatsDeplacement] = useState([]);
+  const [rechercheDeplacementEnCours, setRechercheDeplacementEnCours] = useState(false);
+  const [articlesSelectionnes, setArticlesSelectionnes] = useState([]);
+  const [familleIdCible, setFamilleIdCible] = useState('');
+  const [sousFamilleIdCible, setSousFamilleIdCible] = useState('');
+  const [nouvelleSousFamilleCibleOuverte, setNouvelleSousFamilleCibleOuverte] = useState(false);
+  const [nomNouvelleSousFamilleCible, setNomNouvelleSousFamilleCible] = useState('');
+  const [codeNouvelleSousFamilleCible, setCodeNouvelleSousFamilleCible] = useState('');
+  const [erreurDeplacement, setErreurDeplacement] = useState('');
+  const [deplacementEnCours, setDeplacementEnCours] = useState(false);
+
+  function ouvrirPanneauDeplacement() {
+    setPanneauDeplacementOuvert(true);
+    setRechercheDeplacement('');
+    setResultatsDeplacement([]);
+    setArticlesSelectionnes([]);
+    setFamilleIdCible('');
+    setSousFamilleIdCible('');
+    setNouvelleSousFamilleCibleOuverte(false);
+    setErreurDeplacement('');
+  }
+
+  async function rechercherPourDeplacement(texte) {
+    setRechercheDeplacement(texte);
+    if (texte.trim().length < 2) { setResultatsDeplacement([]); return; }
+    setRechercheDeplacementEnCours(true);
+    try {
+      const reponse = await appelApi('GET', `/articles/recherche?q=${encodeURIComponent(texte.trim())}`);
+      setResultatsDeplacement(reponse.resultats || []);
+    } catch {
+      setResultatsDeplacement([]);
+    } finally {
+      setRechercheDeplacementEnCours(false);
+    }
+  }
+
+  function ajouterALaSelection(article) {
+    setArticlesSelectionnes((prec) => (prec.some((a) => a.id === article.id) ? prec : [...prec, article]));
+    setRechercheDeplacement('');
+    setResultatsDeplacement([]);
+  }
+
+  function retirerDeLaSelection(id) {
+    setArticlesSelectionnes((prec) => prec.filter((a) => a.id !== id));
+  }
+
+  async function creerSousFamilleCible() {
+    if (!nomNouvelleSousFamilleCible.trim() || !codeNouvelleSousFamilleCible.trim() || !familleIdCible) {
+      setErreurDeplacement('Choisis une famille, un nom et un préfixe pour la nouvelle sous-famille.');
+      return;
+    }
+    setErreurDeplacement('');
+    try {
+      const nouvelle = await appelApi('POST', `/familles/${familleIdCible}/sous-familles`, {
+        nom: nomNouvelleSousFamilleCible.trim(),
+        codePrefixe: codeNouvelleSousFamilleCible.trim(),
+      });
+      const listeFamilles = await appelApi('GET', '/familles');
+      setFamilles(listeFamilles);
+      setSousFamilleIdCible(String(nouvelle.id));
+      setNouvelleSousFamilleCibleOuverte(false);
+      setNomNouvelleSousFamilleCible('');
+      setCodeNouvelleSousFamilleCible('');
+    } catch (err) {
+      setErreurDeplacement(err.message);
+    }
+  }
+
+  async function validerDeplacement() {
+    if (articlesSelectionnes.length === 0) {
+      setErreurDeplacement('Ajoute au moins un article à déplacer.');
+      return;
+    }
+    if (!sousFamilleIdCible) {
+      setErreurDeplacement('Choisis la sous-famille de destination.');
+      return;
+    }
+    setDeplacementEnCours(true);
+    setErreurDeplacement('');
+    try {
+      await appelApi('PUT', '/articles/deplacer-groupe', {
+        articleIds: articlesSelectionnes.map((a) => a.id),
+        sousFamilleId: Number(sousFamilleIdCible),
+      });
+      setPanneauDeplacementOuvert(false);
+      chargerDonnees();
+    } catch (err) {
+      setErreurDeplacement(err.message);
+    } finally {
+      setDeplacementEnCours(false);
+    }
+  }
+
+  // --- Rechercher un article à modifier (n'importe lequel, sans avoir à faire défiler) ---
+  const [panneauModifOuvert, setPanneauModifOuvert] = useState(false);
+  const [rechercheModif, setRechercheModif] = useState('');
+  const [resultatsModif, setResultatsModif] = useState([]);
+  const [rechercheModifEnCours, setRechercheModifEnCours] = useState(false);
+
+  function ouvrirPanneauModif() {
+    setPanneauModifOuvert(true);
+    setRechercheModif('');
+    setResultatsModif([]);
+  }
+
+  async function rechercherPourModif(texte) {
+    setRechercheModif(texte);
+    if (texte.trim().length < 2) { setResultatsModif([]); return; }
+    setRechercheModifEnCours(true);
+    try {
+      const reponse = await appelApi('GET', `/articles/recherche?q=${encodeURIComponent(texte.trim())}`);
+      setResultatsModif(reponse.resultats || []);
+    } catch {
+      setResultatsModif([]);
+    } finally {
+      setRechercheModifEnCours(false);
+    }
+  }
+
+  function choisirArticlePourModif(article) {
+    setPanneauModifOuvert(false);
+    ouvrirEdition(article);
+  }
+
   useEffect(() => {
     chargerDonnees();
     rafraichirCompteurImpression();
@@ -173,6 +300,12 @@ export default function Articles() {
           )}
           <button onClick={ouvrirPanneauReimpression} style={styles.boutonRetour}>
             🖨️ Réimprimer une étiquette
+          </button>
+          <button onClick={ouvrirPanneauModif} style={styles.boutonRetour}>
+            🔍 Modifier un article
+          </button>
+          <button onClick={ouvrirPanneauDeplacement} style={styles.boutonRetour}>
+            📂 Déplacer des articles
           </button>
           <button onClick={ouvrirCreation} style={styles.boutonAjouter}>
             + Nouvel article
@@ -336,6 +469,170 @@ export default function Articles() {
                 style={styles.boutonValider}
               >
                 {impressionReimpressionEnCours ? 'Impression…' : 'Imprimer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {panneauDeplacementOuvert && (
+        <div style={styles.overlay} onClick={() => setPanneauDeplacementOuvert(false)}>
+          <div style={styles.panneauEtiquettes} onClick={(e) => e.stopPropagation()}>
+            <h2 style={styles.titreFormulaire}>Déplacer des articles vers une sous-famille</h2>
+            <p style={{ fontSize: 13, color: 'var(--brown-soft)', marginTop: -8 }}>
+              Ajoute un ou plusieurs articles à la liste, puis choisis la sous-famille de destination
+              (existante ou toute nouvelle).
+            </p>
+
+            {erreurDeplacement && <p style={{ color: 'var(--error)' }}>{erreurDeplacement}</p>}
+
+            <input
+              autoFocus
+              style={styles.champQuantite2}
+              placeholder="Désignation ou référence…"
+              value={rechercheDeplacement}
+              onChange={(e) => rechercherPourDeplacement(e.target.value)}
+            />
+            {rechercheDeplacementEnCours && <p style={{ color: 'var(--brown-soft)' }}>Recherche…</p>}
+            {!rechercheDeplacementEnCours && resultatsDeplacement.length > 0 && (
+              <div style={styles.listeEtiquettes}>
+                {resultatsDeplacement.map((a) => (
+                  <div key={a.id} style={{ ...styles.ligneEtiquette, cursor: 'pointer' }} onClick={() => ajouterALaSelection(a)}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{a.designation}</div>
+                      <div style={{ fontSize: 12, color: 'var(--brown-soft)' }}>{a.reference}</div>
+                    </div>
+                    <span style={{ color: 'var(--gold-deep)', fontWeight: 700, fontSize: 13 }}>+ Ajouter</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {articlesSelectionnes.length > 0 && (
+              <>
+                <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                  {articlesSelectionnes.length} article(s) à déplacer :
+                </p>
+                <div style={styles.listeEtiquettes}>
+                  {articlesSelectionnes.map((a) => (
+                    <div key={a.id} style={styles.ligneEtiquette}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{a.designation}</div>
+                        <div style={{ fontSize: 12, color: 'var(--brown-soft)' }}>{a.reference}</div>
+                      </div>
+                      <button type="button" onClick={() => retirerDeLaSelection(a.id)} style={styles.boutonEditer}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <label style={styles.champLabel}>
+              Famille de destination
+              <select
+                style={styles.champInput}
+                value={familleIdCible}
+                onChange={(e) => { setFamilleIdCible(e.target.value); setSousFamilleIdCible(''); }}
+              >
+                <option value="">—</option>
+                {familles.map((f) => (
+                  <option key={f.id} value={f.id}>{f.nom}</option>
+                ))}
+              </select>
+            </label>
+
+            {familleIdCible && !nouvelleSousFamilleCibleOuverte && (
+              <label style={styles.champLabel}>
+                Sous-famille de destination
+                <div style={styles.ligneAvecBouton}>
+                  <select
+                    style={{ ...styles.champInput, flex: 1 }}
+                    value={sousFamilleIdCible}
+                    onChange={(e) => setSousFamilleIdCible(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {familles.find((f) => String(f.id) === familleIdCible)?.sousFamilles.map((sf) => (
+                      <option key={sf.id} value={sf.id}>{sf.nom} ({sf.codePrefixe})</option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={() => setNouvelleSousFamilleCibleOuverte(true)} style={styles.boutonPlus}>+</button>
+                </div>
+              </label>
+            )}
+
+            {nouvelleSousFamilleCibleOuverte && (
+              <div style={styles.blocCreationRapide}>
+                <input
+                  style={styles.champInput}
+                  placeholder="Nom de la nouvelle sous-famille"
+                  value={nomNouvelleSousFamilleCible}
+                  onChange={(e) => setNomNouvelleSousFamilleCible(e.target.value)}
+                />
+                <input
+                  style={{ ...styles.champInput, maxWidth: 100 }}
+                  placeholder="Préfixe (ex: ANDT)"
+                  value={codeNouvelleSousFamilleCible}
+                  onChange={(e) => setCodeNouvelleSousFamilleCible(e.target.value)}
+                />
+                <button type="button" onClick={creerSousFamilleCible} style={styles.boutonValiderPetit}>
+                  Créer
+                </button>
+              </div>
+            )}
+
+            <div style={styles.boutonsFormulaire}>
+              <button type="button" onClick={() => setPanneauDeplacementOuvert(false)} style={styles.boutonAnnuler}>
+                Annuler
+              </button>
+              <button type="button" onClick={validerDeplacement} disabled={deplacementEnCours} style={styles.boutonValider}>
+                {deplacementEnCours ? 'Déplacement…' : `Déplacer ${articlesSelectionnes.length || ''} article(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {panneauModifOuvert && (
+        <div style={styles.overlay} onClick={() => setPanneauModifOuvert(false)}>
+          <div style={styles.panneauEtiquettes} onClick={(e) => e.stopPropagation()}>
+            <h2 style={styles.titreFormulaire}>Modifier un article</h2>
+            <p style={{ fontSize: 13, color: 'var(--brown-soft)', marginTop: -8 }}>
+              Recherche par nom ou référence.
+            </p>
+
+            <input
+              autoFocus
+              style={styles.champQuantite2}
+              placeholder="Désignation ou référence…"
+              value={rechercheModif}
+              onChange={(e) => rechercherPourModif(e.target.value)}
+            />
+
+            {rechercheModifEnCours && <p style={{ color: 'var(--brown-soft)' }}>Recherche…</p>}
+
+            {!rechercheModifEnCours && resultatsModif.length > 0 && (
+              <div style={styles.listeEtiquettes}>
+                {resultatsModif.map((a) => (
+                  <div
+                    key={a.id}
+                    style={{ ...styles.ligneEtiquette, cursor: 'pointer' }}
+                    onClick={() => choisirArticlePourModif(a)}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{a.designation}</div>
+                      <div style={{ fontSize: 12, color: 'var(--brown-soft)' }}>{a.reference}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!rechercheModifEnCours && rechercheModif.trim().length >= 2 && resultatsModif.length === 0 && (
+              <p style={{ color: 'var(--brown-soft)', fontSize: 13 }}>Aucun article trouvé.</p>
+            )}
+
+            <div style={styles.boutonsFormulaire}>
+              <button type="button" onClick={() => setPanneauModifOuvert(false)} style={styles.boutonAnnuler}>
+                Fermer
               </button>
             </div>
           </div>

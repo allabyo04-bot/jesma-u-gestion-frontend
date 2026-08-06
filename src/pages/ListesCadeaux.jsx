@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { appelApi } from '../lib/api';
+import BandeauPhotosProduits from '../components/BandeauPhotosProduits';
 
 const SOUS_ONGLETS = [
   { id: 'nouvelle', label: 'Nouvelle liste' },
@@ -41,6 +42,8 @@ export default function ListesCadeaux() {
         </button>
         <h1 style={styles.titre}>Listes cadeaux</h1>
       </div>
+
+      <BandeauPhotosProduits articles={articles} />
 
       <div style={styles.sousOnglets}>
         {SOUS_ONGLETS.map((o) => (
@@ -789,7 +792,13 @@ function OngletOffresEnAttente() {
             </div>
 
             {offre.offrePar && (
-              <div style={styles.texteMuet}>Offert par : {offre.offrePar}</div>
+              <div style={styles.texteMuet}>
+                Offert par : {offre.offrePar}
+                {offre.telephoneOffrePar && ` — ${offre.telephoneOffrePar}`}
+              </div>
+            )}
+            {!offre.offrePar && offre.telephoneOffrePar && (
+              <div style={styles.texteMuet}>Contact donateur : {offre.telephoneOffrePar}</div>
             )}
 
             <div style={styles.listeLignes}>

@@ -234,6 +234,10 @@ function FormulaireNouveauClient({ onFermer, onCree }) {
       setErreur('Le nom complet est requis.');
       return;
     }
+    if (!telephone.trim()) {
+      setErreur('Le téléphone est requis.');
+      return;
+    }
     setEnvoiEnCours(true);
     try {
       const client = await appelApi('POST', '/clients', {
@@ -262,8 +266,8 @@ function FormulaireNouveauClient({ onFermer, onCree }) {
           <input style={styles.champInput} value={nomComplet} onChange={(e) => setNomComplet(e.target.value)} />
         </label>
         <label style={styles.champLabel}>
-          Téléphone
-          <input style={styles.champInput} value={telephone} onChange={(e) => setTelephone(e.target.value)} />
+          Téléphone *
+          <input style={styles.champInput} value={telephone} onChange={(e) => setTelephone(e.target.value)} required />
         </label>
         <label style={styles.champLabel}>
           Email

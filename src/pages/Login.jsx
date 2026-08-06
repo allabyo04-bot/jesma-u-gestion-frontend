@@ -32,17 +32,12 @@ export default function Login() {
         <div className="arc arc--two" />
 
         <div className="brand-mark">
-          <div className="u-badge">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M6 4v9a6 6 0 0 0 12 0V4" stroke="#4A2C17" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </div>
+          <img src="/logo-jesma-u.png" alt="Jesma U" className="u-badge" />
           <span className="wordmark">Jesma U</span>
         </div>
 
         <div className="brand-copy">
-          <h1>La gestion de votre boutique, avec la douceur de Jesma U.</h1>
-          <p>Stock, ventes, cartes cadeaux et listes cadeaux — tout au même endroit, pensé pour votre équipe.</p>
+          <span className="tagline">L'art d'accueillir la vie et de l'entretenir</span>
         </div>
 
         <svg className="brand-illustration" width="140" height="110" viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg">
