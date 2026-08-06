@@ -4,7 +4,7 @@ import { appelApiPublic } from '../lib/api';
 
 const MODES_PAIEMENT = [
   'Espèces', 'Moov Money', 'MTN Money', 'Orange Money',
-  'Wave', 'Carte bancaire',
+  'Wave', 'DJAMO', 'Carte bancaire',
 ];
 
 // Page publique consultée via le lien partagé (ex: WhatsApp, SMS). Aucune connexion requise.
@@ -15,22 +15,41 @@ export default function ListeCadeauPublique() {
   const [liste, setListe] = useState(null);
   const [erreur, setErreur] = useState('');
   const [chargement, setChargement] = useState(true);
+  const [jekoDisponible, setJekoDisponible] = useState(false);
 
   useEffect(() => {
     appelApiPublic('GET', `/listes-cadeaux/publique/${codeAcces}`)
       .then(setListe)
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false));
+    appelApiPublic('GET', '/listes-cadeaux/jeko-disponible').then((r) => setJekoDisponible(r.disponible)).catch(() => {});
   }, [codeAcces]);
 
-  const [typePaiement, setTypePaiement] = useState('carte'); // 'carte' | 'autre'
-  const [carteCadeauCode, setCarteCadeauCode] = useState('');
   const [modePaiementChoisi, setModePaiementChoisi] = useState(MODES_PAIEMENT[0]);
   const [offrePar, setOffrePar] = useState('');
+  const [telephoneOffrePar, setTelephoneOffrePar] = useState('');
   const [quantitesChoisies, setQuantitesChoisies] = useState({});
   const [erreurOffre, setErreurOffre] = useState('');
   const [resultatOffre, setResultatOffre] = useState(null); // { statutConfirmation }
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [paiementJeko, setPaiementJeko] = useState(null); // { id, jekoPaymentUrl, statutConfirmation }
+  const [lienOuvert, setLienOuvert] = useState(false);
+
+  // Sondage du statut de paiement JEKO en cours, jusqu'à confirmation.
+  useEffect(() => {
+    if (!paiementJeko || paiementJeko.statutConfirmation === 'CONFIRME') return;
+    const intervalle = setInterval(async () => {
+      try {
+        const s = await appelApiPublic('GET', `/listes-cadeaux/offres/${paiementJeko.id}/statut-paiement`);
+        setPaiementJeko((prec) => ({ ...prec, statutConfirmation: s.statutConfirmation }));
+        if (s.statutConfirmation === 'CONFIRME') {
+          const misAJour = await appelApiPublic('GET', `/listes-cadeaux/publique/${codeAcces}`);
+          setListe(misAJour);
+        }
+      } catch { /* on réessaiera au prochain intervalle */ }
+    }, 4000);
+    return () => clearInterval(intervalle);
+  }, [paiementJeko, codeAcces]);
 
   // Montant calculé automatiquement à partir des articles/quantités sélectionnés — jamais
   // saisi librement, pour garantir que ce qui est déclaré correspond à ce qui est offert.
@@ -50,9 +69,11 @@ export default function ListeCadeauPublique() {
     e.preventDefault();
     setErreurOffre('');
     setResultatOffre(null);
+    setPaiementJeko(null);
+    setLienOuvert(false);
 
-    if (typePaiement === 'carte' && !carteCadeauCode.trim()) {
-      setErreurOffre('Le code de votre carte cadeau est requis.');
+    if (!telephoneOffrePar.trim()) {
+      setErreurOffre('Votre téléphone est requis, pour que la boutique puisse vous contacter.');
       return;
     }
 
@@ -64,7 +85,7 @@ export default function ListeCadeauPublique() {
       setErreurOffre('Choisissez au moins un article à offrir.');
       return;
     }
-    if (typePaiement === 'autre' && montantCalcule <= 0) {
+    if (montantCalcule <= 0) {
       setErreurOffre('Choisissez au moins un article à offrir avant de payer.');
       return;
     }
@@ -72,22 +93,34 @@ export default function ListeCadeauPublique() {
     setEnvoiEnCours(true);
     try {
       const reponse = await appelApiPublic('POST', `/listes-cadeaux/publique/${codeAcces}/offrir`, {
-        carteCadeauCode: typePaiement === 'carte' ? carteCadeauCode.trim() : undefined,
-        modePaiement: typePaiement === 'autre' ? modePaiementChoisi : undefined,
-        montant: typePaiement === 'autre' ? montantCalcule : undefined,
+        modePaiement: modePaiementChoisi,
+        montant: montantCalcule,
         offrePar: offrePar || undefined,
+        telephoneOffrePar: telephoneOffrePar.trim(),
         lignes: lignesChoisies,
       });
-      setResultatOffre(reponse);
-      const misAJour = await appelApiPublic('GET', `/listes-cadeaux/publique/${codeAcces}`);
-      setListe(misAJour);
-      setCarteCadeauCode('');
+
+      if (modePaiementChoisi === 'JEKO') {
+        setPaiementJeko({ id: reponse.id, jekoPaymentUrl: reponse.jekoPaymentUrl, statutConfirmation: reponse.statutConfirmation });
+      } else {
+        setResultatOffre(reponse);
+        const misAJour = await appelApiPublic('GET', `/listes-cadeaux/publique/${codeAcces}`);
+        setListe(misAJour);
+      }
+      setTelephoneOffrePar('');
       setOffrePar('');
       setQuantitesChoisies({});
     } catch (err) {
       setErreurOffre(err.message);
     } finally {
       setEnvoiEnCours(false);
+    }
+  }
+
+  function ouvrirPaiementJeko() {
+    if (paiementJeko?.jekoPaymentUrl) {
+      window.open(paiementJeko.jekoPaymentUrl, '_blank', 'noopener,noreferrer');
+      setLienOuvert(true);
     }
   }
 
@@ -107,10 +140,14 @@ export default function ListeCadeauPublique() {
   return (
     <div style={styles.page}>
       <header style={styles.entete}>
-        <div style={styles.logoRond}>U</div>
+        <img src="/logo-jesma-u.png" alt="Jesma U" style={styles.logoImage} onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+        <div style={{ ...styles.logoRond, display: 'none' }}>U</div>
         <div>
           <h1 style={styles.titrePrincipal}>Jesma U</h1>
-          <p style={styles.sousTitre}>Liste cadeau</p>
+          <p style={styles.slogan}>L'art d'accueillir la vie et de l'entretenir</p>
+          <p style={styles.sousTitre}>
+            Liste cadeau de {liste.nomDestinataire || liste.client.nomComplet}
+          </p>
         </div>
       </header>
 
@@ -162,7 +199,7 @@ export default function ListeCadeauPublique() {
         <div style={styles.blocOffrir}>
           <h3 style={styles.titreOffrir}>Vous souhaitez offrir un cadeau ?</h3>
           <p style={styles.texteMuet}>
-            Choisissez vos articles ci-dessus, puis payez avec une carte cadeau Jesma U ou un autre moyen.
+            Choisissez vos articles ci-dessus, puis réglez par le moyen de paiement de votre choix.
           </p>
 
           {resultatOffre && resultatOffre.statutConfirmation === 'CONFIRME' && (
@@ -178,47 +215,58 @@ export default function ListeCadeauPublique() {
           )}
           {erreurOffre && <div style={styles.bandeauErreur}>{erreurOffre}</div>}
 
-          <div style={styles.togglePaiement}>
-            <button
-              type="button"
-              onClick={() => setTypePaiement('carte')}
-              style={typePaiement === 'carte' ? styles.toggleActif : styles.toggle}
-            >
-              Carte cadeau
-            </button>
-            <button
-              type="button"
-              onClick={() => setTypePaiement('autre')}
-              style={typePaiement === 'autre' ? styles.toggleActif : styles.toggle}
-            >
-              Autre moyen de paiement
-            </button>
-          </div>
+          {paiementJeko && paiementJeko.statutConfirmation === 'CONFIRME' && (
+            <div style={styles.bandeauConfirmation}>
+              Merci pour votre générosité ! Votre paiement a été reçu et votre cadeau enregistré. 💛
+            </div>
+          )}
+          {paiementJeko && paiementJeko.statutConfirmation !== 'CONFIRME' && (
+            <div style={styles.bandeauAttente}>
+              {!lienOuvert ? (
+                <>
+                  <p style={{ margin: '0 0 10px' }}>Votre cadeau est réservé — il ne reste qu'à régler.</p>
+                  <button type="button" onClick={ouvrirPaiementJeko} style={styles.boutonOffrir}>
+                    Ouvrir la page de paiement
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p style={{ margin: '0 0 8px' }}>⏳ En attente de la confirmation de votre paiement — cette page se met à jour automatiquement.</p>
+                  <button type="button" onClick={ouvrirPaiementJeko} style={{ background: 'none', border: 'none', color: 'var(--brown-ink)', fontWeight: 700, cursor: 'pointer', fontSize: 13, textDecoration: 'underline', padding: 0 }}>
+                    Rouvrir la page de paiement
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           <form onSubmit={offrir} style={styles.formOffrir}>
-            {typePaiement === 'carte' ? (
-              <input
-                style={styles.champInput}
-                value={carteCadeauCode}
-                onChange={(e) => setCarteCadeauCode(e.target.value)}
-                placeholder="Code de votre carte cadeau"
-              />
+            <select style={styles.champInput} value={modePaiementChoisi} onChange={(e) => setModePaiementChoisi(e.target.value)}>
+              {jekoDisponible && <option value="JEKO">💳 Payer en ligne (Wave, Orange Money, MTN, carte…)</option>}
+              {MODES_PAIEMENT.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <div style={styles.montantCalcule}>
+              Montant à envoyer : <strong>{montantCalcule.toLocaleString('fr-FR')} F</strong>
+            </div>
+            {modePaiementChoisi === 'JEKO' ? (
+              <p style={styles.texteAide}>
+                Vous serez redirigé(e) vers une page sécurisée pour payer directement — confirmation automatique et immédiate.
+              </p>
             ) : (
-              <>
-                <select style={styles.champInput} value={modePaiementChoisi} onChange={(e) => setModePaiementChoisi(e.target.value)}>
-                  {MODES_PAIEMENT.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-                <div style={styles.montantCalcule}>
-                  Montant à envoyer : <strong>{montantCalcule.toLocaleString('fr-FR')} F</strong>
-                </div>
-                <p style={styles.texteAide}>
-                  Envoyez ce montant au +225 07 69 535 786, puis cliquez sur "Offrir ce cadeau".
-                  La boutique vérifiera la réception avant de confirmer votre don.
-                </p>
-              </>
+              <p style={styles.texteAide}>
+                Envoyez ce montant au +225 07 69 535 786, puis cliquez sur "Offrir ce cadeau".
+                La boutique vérifiera la réception avant de confirmer votre don.
+              </p>
             )}
+            <input
+              style={styles.champInput}
+              value={telephoneOffrePar}
+              onChange={(e) => setTelephoneOffrePar(e.target.value)}
+              placeholder="Votre téléphone (requis, pour vous contacter) *"
+              required
+            />
             <input
               style={styles.champInput}
               value={offrePar}
@@ -240,10 +288,12 @@ const styles = {
   pageErreur: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--cream)', fontFamily: 'var(--font-body)', textAlign: 'center', padding: 40 },
   titreErreur: { fontFamily: 'var(--font-display)', color: 'var(--brown-ink)' },
   page: { minHeight: '100vh', background: 'var(--cream)', fontFamily: 'var(--font-body)', color: 'var(--brown-ink)' },
-  entete: { display: 'flex', alignItems: 'center', gap: 16, padding: '24px 20px', background: 'var(--brown-deep)', color: 'var(--cream)' },
-  logoRond: { width: 48, height: 48, borderRadius: '50%', background: 'var(--gold-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--white)', flexShrink: 0 },
+  entete: { display: 'flex', alignItems: 'center', gap: 16, padding: '24px 20px', background: 'var(--gold-deep)', color: 'var(--brown-ink)' },
+  logoImage: { width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 },
+  logoRond: { width: 48, height: 48, borderRadius: '50%', background: 'var(--brown-deep)', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--white)', flexShrink: 0 },
   titrePrincipal: { fontFamily: 'var(--font-display)', margin: 0, fontSize: 22 },
   sousTitre: { margin: 0, fontSize: 13, opacity: 0.85 },
+  slogan: { margin: '2px 0 4px', fontSize: 12, fontStyle: 'italic', opacity: 0.8 },
   contenu: { maxWidth: 640, margin: '0 auto', padding: '24px 20px' },
   titreListe: { fontFamily: 'var(--font-display)', fontSize: 26, margin: '0 0 4px 0' },
   texteMuet: { fontSize: 13, color: 'var(--brown-soft)', margin: 0 },
