@@ -197,3 +197,13 @@ export async function uploaderPhotoArticle(articleId, fichier) {
   }
   return data;
 }
+
+// Supprime une photo de la galerie d'un article
+export async function supprimerPhotoArticle(articleId, photoId) {
+  return appelApi('DELETE', `/articles/${articleId}/photos/${photoId}`);
+}
+
+// Définit une photo existante comme photo principale de l'article
+export async function definirPhotoPrincipaleArticle(articleId, photoId) {
+  return appelApi('PUT', `/articles/${articleId}/photos/${photoId}/principale`);
+}

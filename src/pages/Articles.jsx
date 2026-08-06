@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { appelApi, uploaderPhotoArticle, envoyerEtRecupererHtmlAvecAuth } from '../lib/api';
+import { appelApi, uploaderPhotoArticle, supprimerPhotoArticle, definirPhotoPrincipaleArticle, envoyerEtRecupererHtmlAvecAuth } from '../lib/api';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'https://jesma-u-gestion-backend-production.up.railway.app/api';
 
@@ -339,7 +339,6 @@ export default function Articles() {
           onFamillesMisesAJour={setFamilles}
           onCree={(article) => {
             ajouterArticleALaListe(article);
-            setFormulaireOuvert(false);
           }}
           onModifie={(article) => {
             mettreAJourArticle(article);
@@ -645,12 +644,16 @@ export default function Articles() {
 function CarteArticle({ article, onPhotoMiseAJour, onCodeBarreGenere, onModifier }) {
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [erreurPhoto, setErreurPhoto] = useState('');
+  const [actionPhotoEnCours, setActionPhotoEnCours] = useState(null);
   const [generationEnCours, setGenerationEnCours] = useState(false);
   const [erreurGeneration, setErreurGeneration] = useState('');
 
-  async function gererChangementPhoto(e) {
+  const photos = article.photos || [];
+
+  async function gererAjoutPhoto(e) {
     const fichier = e.target.files[0];
     if (!fichier) return;
+    e.target.value = '';
     setEnvoiEnCours(true);
     setErreurPhoto('');
     try {
@@ -660,6 +663,32 @@ function CarteArticle({ article, onPhotoMiseAJour, onCodeBarreGenere, onModifier
       setErreurPhoto(err.message);
     } finally {
       setEnvoiEnCours(false);
+    }
+  }
+
+  async function gererSuppressionPhoto(photoId) {
+    setActionPhotoEnCours(photoId);
+    setErreurPhoto('');
+    try {
+      const articleMisAJour = await supprimerPhotoArticle(article.id, photoId);
+      onPhotoMiseAJour(articleMisAJour);
+    } catch (err) {
+      setErreurPhoto(err.message);
+    } finally {
+      setActionPhotoEnCours(null);
+    }
+  }
+
+  async function gererDefinirPrincipale(photoId) {
+    setActionPhotoEnCours(photoId);
+    setErreurPhoto('');
+    try {
+      const articleMisAJour = await definirPhotoPrincipaleArticle(article.id, photoId);
+      onPhotoMiseAJour(articleMisAJour);
+    } catch (err) {
+      setErreurPhoto(err.message);
+    } finally {
+      setActionPhotoEnCours(null);
     }
   }
 
@@ -689,11 +718,56 @@ function CarteArticle({ article, onPhotoMiseAJour, onCodeBarreGenere, onModifier
         <input
           type="file"
           accept="image/*"
-          onChange={gererChangementPhoto}
+          onChange={gererAjoutPhoto}
           style={{ display: 'none' }}
           disabled={envoiEnCours}
         />
       </label>
+
+      {(photos.length > 0 || envoiEnCours) && (
+        <div style={styles.galeriePhotos}>
+          {photos.map((photo) => (
+            <div key={photo.id} style={styles.miniature}>
+              <img
+                src={photo.url}
+                alt=""
+                onClick={() => !photo.estPrincipale && gererDefinirPrincipale(photo.id)}
+                style={{
+                  ...styles.imageMiniature,
+                  outline: photo.estPrincipale ? '2px solid var(--gold-deep)' : 'none',
+                  cursor: photo.estPrincipale ? 'default' : 'pointer',
+                  opacity: actionPhotoEnCours === photo.id ? 0.5 : 1,
+                }}
+                title={photo.estPrincipale ? 'Photo principale' : 'Cliquer pour définir comme principale'}
+              />
+              {photo.estPrincipale && <span style={styles.etoilePrincipale}>★</span>}
+              <button
+                type="button"
+                onClick={() => gererSuppressionPhoto(photo.id)}
+                disabled={actionPhotoEnCours === photo.id}
+                style={styles.boutonSupprimerMiniature}
+                title="Supprimer cette photo"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <label style={styles.miniatureAjouter}>
+            {envoiEnCours ? '…' : '+'}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={gererAjoutPhoto}
+              style={{ display: 'none' }}
+              disabled={envoiEnCours}
+            />
+          </label>
+        </div>
+      )}
+      {photos.length > 1 && (
+        <p style={styles.legendeEtoile}>★ = photo principale · clic sur une autre pour la changer</p>
+      )}
+
       <div style={styles.corpsCarte}>
         <div style={styles.enTeteCorpsCarte}>
           <div style={styles.designation}>{article.designation}</div>
@@ -736,8 +810,104 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
   const [prixAchat, setPrixAchat] = useState(articleEnEdition?.prixAchat ?? '');
   const [prixVente, setPrixVente] = useState(articleEnEdition?.prixVente ?? '');
   const [seuilAlerte, setSeuilAlerte] = useState(articleEnEdition ? String(articleEnEdition.seuilAlerte) : '5');
+  const [description, setDescription] = useState(articleEnEdition?.description || '');
   const [erreur, setErreur] = useState('');
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
+
+  // Galerie photo dans le formulaire d'édition (article déjà créé uniquement)
+  const [photos, setPhotos] = useState(articleEnEdition?.photos || []);
+  const [photoUrlPrincipale, setPhotoUrlPrincipale] = useState(articleEnEdition?.photoUrl || null);
+  const [envoiPhotoEnCours, setEnvoiPhotoEnCours] = useState(false);
+  const [actionPhotoEnCours, setActionPhotoEnCours] = useState(null);
+  const [erreurPhoto, setErreurPhoto] = useState('');
+
+  // Étape "mise en stock" affichée juste après la création d'un nouvel article
+  const [articleCree, setArticleCree] = useState(null);
+  const [lieuxStock, setLieuxStock] = useState([]);
+  const [lieuStockId, setLieuStockId] = useState('');
+  const [quantiteStock, setQuantiteStock] = useState('');
+  const [envoiStockEnCours, setEnvoiStockEnCours] = useState(false);
+  const [erreurStock, setErreurStock] = useState('');
+  const [stockAjoute, setStockAjoute] = useState(false);
+
+  useEffect(() => {
+    if (!estEdition) {
+      appelApi('GET', '/stock/lieux').then((l) => {
+        setLieuxStock(l);
+        if (l.length === 1) setLieuStockId(String(l[0].id));
+      }).catch(() => {});
+    }
+  }, [estEdition]);
+
+  async function gererAjoutPhotoFormulaire(e) {
+    const fichier = e.target.files[0];
+    if (!fichier) return;
+    e.target.value = '';
+    setEnvoiPhotoEnCours(true);
+    setErreurPhoto('');
+    try {
+      const articleMisAJour = await uploaderPhotoArticle(articleEnEdition.id, fichier);
+      setPhotos(articleMisAJour.photos || []);
+      setPhotoUrlPrincipale(articleMisAJour.photoUrl);
+      onModifie(articleMisAJour);
+    } catch (err) {
+      setErreurPhoto(err.message);
+    } finally {
+      setEnvoiPhotoEnCours(false);
+    }
+  }
+
+  async function gererSuppressionPhotoFormulaire(photoId) {
+    setActionPhotoEnCours(photoId);
+    setErreurPhoto('');
+    try {
+      const articleMisAJour = await supprimerPhotoArticle(articleEnEdition.id, photoId);
+      setPhotos(articleMisAJour.photos || []);
+      setPhotoUrlPrincipale(articleMisAJour.photoUrl);
+      onModifie(articleMisAJour);
+    } catch (err) {
+      setErreurPhoto(err.message);
+    } finally {
+      setActionPhotoEnCours(null);
+    }
+  }
+
+  async function gererDefinirPrincipaleFormulaire(photoId) {
+    setActionPhotoEnCours(photoId);
+    setErreurPhoto('');
+    try {
+      const articleMisAJour = await definirPhotoPrincipaleArticle(articleEnEdition.id, photoId);
+      setPhotos(articleMisAJour.photos || []);
+      setPhotoUrlPrincipale(articleMisAJour.photoUrl);
+      onModifie(articleMisAJour);
+    } catch (err) {
+      setErreurPhoto(err.message);
+    } finally {
+      setActionPhotoEnCours(null);
+    }
+  }
+
+  async function gererAjoutStockInitial(e) {
+    e.preventDefault();
+    setErreurStock('');
+    if (!lieuStockId) return setErreurStock('Choisis un dépôt/boutique.');
+    const quantite = Number(quantiteStock);
+    if (!quantite || quantite <= 0) return setErreurStock('Indique une quantité valide.');
+
+    setEnvoiStockEnCours(true);
+    try {
+      await appelApi('POST', '/stock/receptions', {
+        lieuId: Number(lieuStockId),
+        lignes: [{ articleId: articleCree.id, quantite, prixAchat: articleCree.prixAchat || 0 }],
+      });
+      setStockAjoute(true);
+      onModifie({ ...articleCree, stockActuel: (articleCree.stockActuel || 0) + quantite });
+    } catch (err) {
+      setErreurStock(err.message);
+    } finally {
+      setEnvoiStockEnCours(false);
+    }
+  }
 
   const [nouvelleFamilleOuverte, setNouvelleFamilleOuverte] = useState(false);
   const [nomNouvelleFamille, setNomNouvelleFamille] = useState('');
@@ -812,6 +982,7 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
           prixAchat: prixAchat !== '' ? Number(prixAchat) : 0,
           prixVente: Number(prixVente),
           seuilAlerte: Number(seuilAlerte),
+          description,
         });
         onModifie(article);
       } else {
@@ -824,14 +995,65 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
           prixAchat: prixAchat ? Number(prixAchat) : 0,
           prixVente: Number(prixVente),
           seuilAlerte: Number(seuilAlerte),
+          description,
         });
         onCree(article);
+        setArticleCree(article);
       }
     } catch (err) {
       setErreur(err.message);
     } finally {
       setEnvoiEnCours(false);
     }
+  }
+
+  if (articleCree) {
+    return (
+      <div style={styles.overlay} onClick={onFermer}>
+        <div style={styles.formulaire} onClick={(e) => e.stopPropagation()}>
+          <h2 style={styles.titreFormulaire}>Article créé !</h2>
+          <p style={{ fontSize: 14, color: 'var(--brown-soft)', marginTop: -8 }}>
+            {articleCree.designation} — référence {articleCree.reference}
+          </p>
+
+          {!stockAjoute ? (
+            <>
+              <p style={{ fontSize: 14 }}>Veux-tu le mettre en stock dès maintenant ?</p>
+              {erreurStock && <p style={{ color: 'var(--error)' }}>{erreurStock}</p>}
+              <form onSubmit={gererAjoutStockInitial} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <label style={styles.champLabel}>
+                  Dépôt / boutique *
+                  <select style={styles.champInput} value={lieuStockId} onChange={(e) => setLieuStockId(e.target.value)} required>
+                    <option value="">— Choisir —</option>
+                    {lieuxStock.map((l) => (
+                      <option key={l.id} value={l.id}>{l.nom}</option>
+                    ))}
+                  </select>
+                </label>
+                <label style={styles.champLabel}>
+                  Quantité *
+                  <input
+                    type="number" min="1" style={styles.champInput}
+                    value={quantiteStock} onChange={(e) => setQuantiteStock(e.target.value)} required
+                  />
+                </label>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button type="button" onClick={onFermer} style={styles.boutonAnnuler}>Plus tard</button>
+                  <button type="submit" disabled={envoiStockEnCours} style={styles.boutonValider}>
+                    {envoiStockEnCours ? 'Ajout…' : 'Ajouter au stock'}
+                  </button>
+                </div>
+              </form>
+            </>
+          ) : (
+            <>
+              <p style={{ color: 'var(--succes)', fontWeight: 700 }}>✓ Stock ajouté avec succès.</p>
+              <button type="button" onClick={onFermer} style={styles.boutonValider}>Terminer</button>
+            </>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -851,6 +1073,64 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
             Référence : {articleEnEdition.reference} (non modifiable)
           </p>
         )}
+
+        {estEdition && (
+          <div style={{ margin: '4px 0 8px' }}>
+            <p style={{ fontSize: 12, color: 'var(--brown-soft)', fontWeight: 700, marginBottom: 6 }}>Photos</p>
+            <div style={styles.galeriePhotos}>
+              {photos.map((photo) => (
+                <div key={photo.id} style={styles.miniature}>
+                  <img
+                    src={photo.url}
+                    alt=""
+                    onClick={() => !photo.estPrincipale && gererDefinirPrincipaleFormulaire(photo.id)}
+                    style={{
+                      ...styles.imageMiniature,
+                      outline: photo.estPrincipale ? '2px solid var(--gold-deep)' : 'none',
+                      cursor: photo.estPrincipale ? 'default' : 'pointer',
+                      opacity: actionPhotoEnCours === photo.id ? 0.5 : 1,
+                    }}
+                    title={photo.estPrincipale ? 'Photo principale' : 'Cliquer pour définir comme principale'}
+                  />
+                  {photo.estPrincipale && <span style={styles.etoilePrincipale}>★</span>}
+                  <button
+                    type="button"
+                    onClick={() => gererSuppressionPhotoFormulaire(photo.id)}
+                    disabled={actionPhotoEnCours === photo.id}
+                    style={styles.boutonSupprimerMiniature}
+                    title="Supprimer cette photo"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <label style={styles.miniatureAjouterFormulaire}>
+                {envoiPhotoEnCours ? '…' : '+ Ajouter'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={gererAjoutPhotoFormulaire}
+                  style={{ display: 'none' }}
+                  disabled={envoiPhotoEnCours}
+                />
+              </label>
+            </div>
+            {photos.length > 1 && (
+              <p style={styles.legendeEtoile}>★ = photo principale · clic sur une autre pour la changer</p>
+            )}
+            {erreurPhoto && <p style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>{erreurPhoto}</p>}
+          </div>
+        )}
+
+        <label style={styles.champLabel}>
+          Description (optionnel)
+          <textarea
+            style={styles.champTextarea}
+            placeholder="Matières, entretien, précisions utiles…"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </label>
 
         {!estEdition && (
           <>
@@ -993,6 +1273,30 @@ const styles = {
   zonePhoto: { display: 'block', cursor: 'pointer', aspectRatio: '1 / 1', background: 'var(--cream-deep)' },
   image: { width: '100%', height: '100%', objectFit: 'cover' },
   placeholderPhoto: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brown-soft)', fontSize: 13, textAlign: 'center', padding: 12 },
+  galeriePhotos: { display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 12px 0' },
+  miniature: { position: 'relative', width: 40, height: 40, flexShrink: 0 },
+  imageMiniature: { width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6 },
+  etoilePrincipale: {
+    position: 'absolute', top: -6, left: -6, width: 18, height: 18, borderRadius: '50%',
+    background: 'var(--gold-deep)', color: 'var(--white)', fontSize: 11, lineHeight: '18px',
+    textAlign: 'center', boxShadow: '0 0 0 2px var(--white)',
+  },
+  legendeEtoile: { fontSize: 11, color: 'var(--brown-soft)', margin: '6px 12px 0' },
+  boutonSupprimerMiniature: {
+    position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: '50%',
+    border: 'none', background: 'var(--error)', color: 'var(--white)', fontSize: 11, lineHeight: '16px',
+    padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  miniatureAjouter: {
+    width: 40, height: 40, flexShrink: 0, borderRadius: 6, border: '1px dashed var(--brown-soft)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+    color: 'var(--brown-soft)', fontSize: 16, fontWeight: 700,
+  },
+  miniatureAjouterFormulaire: {
+    width: 64, height: 64, flexShrink: 0, borderRadius: 8, border: '1px dashed var(--brown-soft)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+    color: 'var(--brown-soft)', fontSize: 11, fontWeight: 700, textAlign: 'center', padding: 4,
+  },
   corpsCarte: { padding: 12 },
   enTeteCorpsCarte: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 },
   boutonModifier: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 },
@@ -1008,6 +1312,7 @@ const styles = {
   titreFormulaire: { fontFamily: 'var(--font-display)', margin: 0, marginBottom: 8 },
   champLabel: { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 600 },
   champInput: { padding: '10px 12px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14 },
+  champTextarea: { padding: '10px 12px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14, fontFamily: 'inherit', minHeight: 70, resize: 'vertical' },
   ligneAvecBouton: { display: 'flex', gap: 6, alignItems: 'stretch' },
   boutonPlus: { padding: '0 14px', borderRadius: 8, border: 'none', background: 'var(--gold-mid)', color: 'var(--white)', cursor: 'pointer', fontWeight: 700, fontSize: 16 },
   blocCreationRapide: { display: 'flex', gap: 6, padding: 10, background: 'var(--cream)', borderRadius: 8 },
