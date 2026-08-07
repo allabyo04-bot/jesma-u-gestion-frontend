@@ -159,6 +159,41 @@ export default function Articles() {
     ouvrirEdition(article);
   }
 
+  // --- Rechercher un article par son prix de vente exact ---
+  const [panneauPrixOuvert, setPanneauPrixOuvert] = useState(false);
+  const [recherchePrix, setRecherchePrix] = useState('');
+  const [resultatsPrix, setResultatsPrix] = useState([]);
+  const [recherchePrixEnCours, setRecherchePrixEnCours] = useState(false);
+  const [rechercheePrixEffectuee, setRechercheePrixEffectuee] = useState(false);
+
+  function ouvrirPanneauPrix() {
+    setPanneauPrixOuvert(true);
+    setRecherchePrix('');
+    setResultatsPrix([]);
+    setRechercheePrixEffectuee(false);
+  }
+
+  async function rechercherParPrix() {
+    const prix = recherchePrix.trim();
+    if (!prix) return;
+    setRecherchePrixEnCours(true);
+    setRechercheePrixEffectuee(false);
+    try {
+      const resultats = await appelApi('GET', `/articles?prix=${encodeURIComponent(prix)}`);
+      setResultatsPrix(resultats);
+    } catch {
+      setResultatsPrix([]);
+    } finally {
+      setRecherchePrixEnCours(false);
+      setRechercheePrixEffectuee(true);
+    }
+  }
+
+  function choisirArticlePourPrix(article) {
+    setPanneauPrixOuvert(false);
+    ouvrirEdition(article);
+  }
+
   // --- Imprimer la liste de tous les articles dont le nom contient un texte donné ---
   const [panneauListeOuvert, setPanneauListeOuvert] = useState(false);
   const [rechercheListe, setRechercheListe] = useState('');
@@ -381,6 +416,9 @@ export default function Articles() {
           </button>
           <button onClick={ouvrirPanneauModif} style={styles.boutonRetour}>
             🔍 Modifier un article
+          </button>
+          <button onClick={ouvrirPanneauPrix} style={styles.boutonRetour}>
+            🔍 Rechercher par prix
           </button>
           <button onClick={ouvrirPanneauDeplacement} style={styles.boutonRetour}>
             📂 Déplacer des articles
@@ -663,6 +701,57 @@ export default function Articles() {
               </button>
               <button type="button" onClick={validerDeplacement} disabled={deplacementEnCours} style={styles.boutonValider}>
                 {deplacementEnCours ? 'Déplacement…' : `Déplacer ${articlesSelectionnes.length || ''} article(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {panneauPrixOuvert && (
+        <div style={styles.overlay} onClick={() => setPanneauPrixOuvert(false)}>
+          <div style={styles.panneauEtiquettes} onClick={(e) => e.stopPropagation()}>
+            <h2 style={styles.titreFormulaire}>Rechercher par prix</h2>
+            <p style={{ fontSize: 13, color: 'var(--brown-soft)', marginTop: -8 }}>
+              Tape le prix de vente exact — tous les articles vendus à ce prix s'affichent.
+            </p>
+
+            <input
+              autoFocus
+              type="number"
+              style={styles.champQuantite2}
+              placeholder="Ex : 5000"
+              value={recherchePrix}
+              onChange={(e) => setRecherchePrix(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && rechercherParPrix()}
+            />
+
+            <button type="button" onClick={rechercherParPrix} disabled={recherchePrixEnCours || !recherchePrix.trim()} style={styles.boutonValider}>
+              {recherchePrixEnCours ? 'Recherche…' : 'Rechercher'}
+            </button>
+
+            {resultatsPrix.length > 0 && (
+              <div style={styles.listeEtiquettes}>
+                {resultatsPrix.map((a) => (
+                  <div
+                    key={a.id}
+                    style={{ ...styles.ligneEtiquette, cursor: 'pointer' }}
+                    onClick={() => choisirArticlePourPrix(a)}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{a.designation}</div>
+                      <div style={{ fontSize: 12, color: 'var(--brown-soft)' }}>{a.reference} — Stock : {a.stockActuel}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {rechercheePrixEffectuee && !recherchePrixEnCours && resultatsPrix.length === 0 && (
+              <p style={{ color: 'var(--brown-soft)', fontSize: 13 }}>Aucun article à ce prix exact.</p>
+            )}
+
+            <div style={styles.boutonsFormulaire}>
+              <button type="button" onClick={() => setPanneauPrixOuvert(false)} style={styles.boutonAnnuler}>
+                Fermer
               </button>
             </div>
           </div>
