@@ -939,6 +939,23 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
   const [erreurStock, setErreurStock] = useState('');
   const [stockAjoute, setStockAjoute] = useState(false);
 
+  const [codeBarreGenerationEnCours, setCodeBarreGenerationEnCours] = useState(false);
+  const [erreurCodeBarrePostCreation, setErreurCodeBarrePostCreation] = useState('');
+
+  async function genererCodeBarrePostCreation() {
+    setErreurCodeBarrePostCreation('');
+    setCodeBarreGenerationEnCours(true);
+    try {
+      const article = await appelApi('POST', `/articles/${articleCree.id}/generer-code-barre`);
+      setArticleCree(article);
+      onModifie(article);
+    } catch (err) {
+      setErreurCodeBarrePostCreation(err.message);
+    } finally {
+      setCodeBarreGenerationEnCours(false);
+    }
+  }
+
   useEffect(() => {
     if (!estEdition) {
       appelApi('GET', '/stock/lieux').then((l) => {
@@ -1124,6 +1141,25 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
           <p style={{ fontSize: 14, color: 'var(--brown-soft)', marginTop: -8 }}>
             {articleCree.designation} — référence {articleCree.reference}
           </p>
+
+          <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--cream)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {articleCree.codeBarre ? (
+              <p style={{ fontSize: 13, margin: 0 }}>✓ Code-barre : <strong>{articleCree.codeBarre}</strong></p>
+            ) : (
+              <>
+                <p style={{ fontSize: 13, margin: 0, flex: 1 }}>Aucun code-barre pour cet article.</p>
+                <button
+                  type="button"
+                  onClick={genererCodeBarrePostCreation}
+                  disabled={codeBarreGenerationEnCours}
+                  style={styles.boutonGenerer}
+                >
+                  {codeBarreGenerationEnCours ? 'Génération…' : 'Générer un code-barre'}
+                </button>
+              </>
+            )}
+          </div>
+          {erreurCodeBarrePostCreation && <p style={{ color: 'var(--error)' }}>{erreurCodeBarrePostCreation}</p>}
 
           {!stockAjoute ? (
             <>
