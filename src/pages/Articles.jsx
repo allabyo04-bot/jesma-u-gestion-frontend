@@ -460,6 +460,7 @@ export default function Articles() {
             mettreAJourArticle(article);
             setFormulaireOuvert(false);
           }}
+          onSyncArticle={mettreAJourArticle}
         />
       )}
 
@@ -997,7 +998,7 @@ function CarteArticle({ article, onPhotoMiseAJour, onCodeBarreGenere, onModifier
   );
 }
 
-function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMisesAJour, onCree, onModifie }) {
+function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMisesAJour, onCree, onModifie, onSyncArticle }) {
   const estEdition = !!articleEnEdition;
 
   const [designation, setDesignation] = useState(articleEnEdition?.designation || '');
@@ -1037,7 +1038,7 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
     try {
       const article = await appelApi('POST', `/articles/${articleCree.id}/generer-code-barre`);
       setArticleCree(article);
-      onModifie(article);
+      onSyncArticle(article);
     } catch (err) {
       setErreurCodeBarrePostCreation(err.message);
     } finally {
@@ -1142,7 +1143,7 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
       });
       setStockAjoute(true);
       setQuantiteEtiquettePostCreation(String(quantite));
-      onModifie({ ...articleCree, stockActuel: (articleCree.stockActuel || 0) + quantite });
+      onSyncArticle({ ...articleCree, stockActuel: (articleCree.stockActuel || 0) + quantite });
     } catch (err) {
       setErreurStock(err.message);
     } finally {
