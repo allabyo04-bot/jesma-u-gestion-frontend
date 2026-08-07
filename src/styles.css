@@ -40,3 +40,12 @@ a {
   outline: 2px solid var(--gold-deep);
   outline-offset: 2px;
 }
+
+/* Saisie et recherche toujours affichées en majuscule à l'écran, quel que
+   soit l'état de la touche Maj/Verr. Maj du clavier. Type "password" (PIN)
+   exclu volontairement. La valeur réellement envoyée au serveur est mise
+   en majuscule côté api.js/backend pour les désignations d'articles. */
+input:not([type="password"]):not([type="number"]):not([type="date"]),
+textarea {
+  text-transform: uppercase;
+}

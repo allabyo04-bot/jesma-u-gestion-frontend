@@ -11,6 +11,7 @@ import ListeCadeauPublique from './pages/ListeCadeauPublique.jsx';
 import Etats from './pages/Etats.jsx';
 import Utilisateurs from './pages/Utilisateurs.jsx';
 import Roles from './pages/Roles.jsx';
+import Familles from './pages/Familles.jsx';
 import Depenses from './pages/Depenses.jsx';
 import Clients from './pages/Clients';
 import Parametres from './pages/Parametres.jsx';
@@ -49,6 +50,14 @@ export default function App() {
         element={
           <RouteProtegee>
             <Roles />
+          </RouteProtegee>
+        }
+      />
+      <Route
+        path="/familles"
+        element={
+          <RouteProtegee>
+            <Familles />
           </RouteProtegee>
         }
       />

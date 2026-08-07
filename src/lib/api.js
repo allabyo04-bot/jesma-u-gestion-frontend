@@ -33,7 +33,9 @@ export async function appelApi(methode, chemin, corps) {
   try { data = texte ? JSON.parse(texte) : null; } catch { data = texte; }
   if (!reponse.ok) {
     const message = (data && data.error) || 'Une erreur est survenue.';
-    throw new Error(message);
+    const erreur = new Error(message);
+    if (data && typeof data === 'object') Object.assign(erreur, data);
+    throw erreur;
   }
   return data;
 }

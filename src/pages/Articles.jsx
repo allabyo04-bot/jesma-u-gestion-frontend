@@ -159,6 +159,78 @@ export default function Articles() {
     ouvrirEdition(article);
   }
 
+  // --- Imprimer la liste de tous les articles dont le nom contient un texte donné ---
+  const [panneauListeOuvert, setPanneauListeOuvert] = useState(false);
+  const [rechercheListe, setRechercheListe] = useState('');
+  const [impressionListeEnCours, setImpressionListeEnCours] = useState(false);
+  const [erreurListe, setErreurListe] = useState('');
+
+  function ouvrirPanneauListe() {
+    setPanneauListeOuvert(true);
+    setRechercheListe('');
+    setErreurListe('');
+  }
+
+  async function imprimerListeParNom() {
+    const texte = rechercheListe.trim();
+    if (!texte) { setErreurListe('Tape un nom (ou un bout de nom) à rechercher.'); return; }
+    setErreurListe('');
+    setImpressionListeEnCours(true);
+    try {
+      const resultats = await appelApi('GET', `/articles?q=${encodeURIComponent(texte)}`);
+      const lignes = resultats
+        .map((a) => `
+          <tr>
+            <td>${a.reference || ''}</td>
+            <td>${a.designation}</td>
+            <td>${a.codeBarre || '—'}</td>
+            <td style="text-align:right">${Number(a.prixVente).toLocaleString('fr-FR')} F</td>
+            <td style="text-align:right">${a.stockActuel}</td>
+          </tr>`).join('');
+
+      const html = `
+        <html>
+          <head>
+            <title>${texte} — Jesma U</title>
+            <meta charset="utf-8" />
+            <style>
+              body { font-family: Arial, sans-serif; padding: 24px; color: #2A2118; }
+              h1 { font-size: 18px; margin-bottom: 2px; }
+              h2 { font-size: 14px; font-weight: normal; color: #6b5d4f; margin-top: 0; }
+              table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
+              th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+              th { background: #f2ece1; }
+              tfoot td { font-weight: bold; border-top: 2px solid #333; }
+              @media print { body { padding: 0; } }
+            </style>
+          </head>
+          <body>
+            <h1>Recherche : "${texte}"</h1>
+            <h2>Liste des articles — Jesma U — imprimé le ${new Date().toLocaleDateString('fr-FR')}</h2>
+            <table>
+              <thead>
+                <tr><th>Référence</th><th>Désignation</th><th>Code-barres</th><th style="text-align:right">Prix vente</th><th style="text-align:right">Stock</th></tr>
+              </thead>
+              <tbody>${lignes || '<tr><td colspan="5">Aucun article trouvé.</td></tr>'}</tbody>
+              <tfoot>
+                <tr><td colspan="4">Total articles</td><td style="text-align:right">${resultats.length}</td></tr>
+              </tfoot>
+            </table>
+            <script>window.onload = () => window.print();</script>
+          </body>
+        </html>`;
+
+      const fenetre = window.open('', '_blank');
+      fenetre.document.write(html);
+      fenetre.document.close();
+      setPanneauListeOuvert(false);
+    } catch (err) {
+      setErreurListe(err.message);
+    } finally {
+      setImpressionListeEnCours(false);
+    }
+  }
+
   useEffect(() => {
     chargerDonnees();
     rafraichirCompteurImpression();
@@ -300,6 +372,12 @@ export default function Articles() {
           )}
           <button onClick={ouvrirPanneauReimpression} style={styles.boutonRetour}>
             🖨️ Réimprimer une étiquette
+          </button>
+          <button onClick={() => navigate('/familles')} style={styles.boutonRetour}>
+            Familles &amp; sous-familles
+          </button>
+          <button onClick={ouvrirPanneauListe} style={styles.boutonRetour}>
+            🖨️ Imprimer une liste (par nom)
           </button>
           <button onClick={ouvrirPanneauModif} style={styles.boutonRetour}>
             🔍 Modifier un article
@@ -585,6 +663,37 @@ export default function Articles() {
               </button>
               <button type="button" onClick={validerDeplacement} disabled={deplacementEnCours} style={styles.boutonValider}>
                 {deplacementEnCours ? 'Déplacement…' : `Déplacer ${articlesSelectionnes.length || ''} article(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {panneauListeOuvert && (
+        <div style={styles.overlay} onClick={() => setPanneauListeOuvert(false)}>
+          <div style={styles.panneauEtiquettes} onClick={(e) => e.stopPropagation()}>
+            <h2 style={styles.titreFormulaire}>Imprimer une liste d'articles</h2>
+            <p style={{ fontSize: 13, color: 'var(--brown-soft)', marginTop: -8 }}>
+              Tape un nom (ou un bout de nom) — tous les articles dont la désignation le contient seront listés et imprimés.
+            </p>
+
+            <input
+              autoFocus
+              style={styles.champQuantite2}
+              placeholder="Ex : KIT NAISSANCE"
+              value={rechercheListe}
+              onChange={(e) => setRechercheListe(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && imprimerListeParNom()}
+            />
+
+            {erreurListe && <p style={{ color: 'var(--error)' }}>{erreurListe}</p>}
+
+            <div style={styles.boutonsFormulaire}>
+              <button type="button" onClick={() => setPanneauListeOuvert(false)} style={styles.boutonAnnuler} disabled={impressionListeEnCours}>
+                Annuler
+              </button>
+              <button type="button" onClick={imprimerListeParNom} disabled={impressionListeEnCours} style={styles.boutonValider}>
+                {impressionListeEnCours ? 'Recherche…' : '🖨️ Imprimer'}
               </button>
             </div>
           </div>
