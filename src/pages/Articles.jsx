@@ -956,6 +956,31 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
     }
   }
 
+  // --- Impression d'étiquette(s) directement depuis ce panneau, sans repasser par la fenêtre Articles ---
+  const [quantiteEtiquettePostCreation, setQuantiteEtiquettePostCreation] = useState('1');
+  const [impressionEtiquettePostCreationEnCours, setImpressionEtiquettePostCreationEnCours] = useState(false);
+  const [erreurEtiquettePostCreation, setErreurEtiquettePostCreation] = useState('');
+  const [etiquetteImprimee, setEtiquetteImprimee] = useState(false);
+
+  async function imprimerEtiquettePostCreation() {
+    const quantite = Math.max(1, Number(quantiteEtiquettePostCreation) || 0);
+    setErreurEtiquettePostCreation('');
+    setImpressionEtiquettePostCreationEnCours(true);
+    try {
+      const html = await envoyerEtRecupererHtmlAvecAuth('/articles/a-imprimer/etiquettes', {
+        lignes: [{ articleId: articleCree.id, quantite }],
+      });
+      const fenetre = window.open('', '_blank');
+      fenetre.document.write(html);
+      fenetre.document.close();
+      setEtiquetteImprimee(true);
+    } catch (err) {
+      setErreurEtiquettePostCreation(err.message);
+    } finally {
+      setImpressionEtiquettePostCreationEnCours(false);
+    }
+  }
+
   useEffect(() => {
     if (!estEdition) {
       appelApi('GET', '/stock/lieux').then((l) => {
@@ -1027,6 +1052,7 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
         lignes: [{ articleId: articleCree.id, quantite, prixAchat: articleCree.prixAchat || 0 }],
       });
       setStockAjoute(true);
+      setQuantiteEtiquettePostCreation(String(quantite));
       onModifie({ ...articleCree, stockActuel: (articleCree.stockActuel || 0) + quantite });
     } catch (err) {
       setErreurStock(err.message);
@@ -1160,6 +1186,34 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
             )}
           </div>
           {erreurCodeBarrePostCreation && <p style={{ color: 'var(--error)' }}>{erreurCodeBarrePostCreation}</p>}
+
+          <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--cream)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {!etiquetteImprimee ? (
+              <>
+                <p style={{ fontSize: 13, margin: 0, fontWeight: 600 }}>🖨️ Étiquette(s) à imprimer</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <input
+                    type="number"
+                    min="1"
+                    style={{ ...styles.champInput, width: 90 }}
+                    value={quantiteEtiquettePostCreation}
+                    onChange={(e) => setQuantiteEtiquettePostCreation(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={imprimerEtiquettePostCreation}
+                    disabled={impressionEtiquettePostCreationEnCours}
+                    style={styles.boutonGenerer}
+                  >
+                    {impressionEtiquettePostCreationEnCours ? 'Impression…' : 'Imprimer'}
+                  </button>
+                </div>
+                {erreurEtiquettePostCreation && <p style={{ color: 'var(--error)', margin: 0 }}>{erreurEtiquettePostCreation}</p>}
+              </>
+            ) : (
+              <p style={{ fontSize: 13, margin: 0, color: 'var(--succes)', fontWeight: 700 }}>✓ Étiquette(s) envoyée(s) à l'impression.</p>
+            )}
+          </div>
 
           {!stockAjoute ? (
             <>
