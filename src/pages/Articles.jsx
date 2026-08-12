@@ -818,7 +818,9 @@ export default function Articles() {
                   >
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 13 }}>{a.designation}</div>
-                      <div style={{ fontSize: 12, color: 'var(--brown-soft)' }}>{a.reference}</div>
+                      <div style={{ fontSize: 12, color: 'var(--brown-soft)' }}>
+                        {a.reference} — {Number(a.prixVente).toLocaleString('fr-FR')} F
+                      </div>
                     </div>
                   </div>
                 ))}
