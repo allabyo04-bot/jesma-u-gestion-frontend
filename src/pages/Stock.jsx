@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { appelApi, uploaderFichierImport, telechargerFichierAvecAuth, uploaderFichierApercuInventaire } from '../lib/api';
+import { appelApi, uploaderFichierImport, telechargerFichierAvecAuth, uploaderFichierApercuInventaire, envoyerEtRecupererHtmlAvecAuth } from '../lib/api';
 
 const SOUS_ONGLETS = [
   { id: 'reception', label: 'Réception' },
@@ -121,6 +121,28 @@ function OngletReception({ lieux, articles, familles, onFamillesMisesAJour, onAr
   const [erreur, setErreur] = useState('');
   const [succes, setSucces] = useState('');
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [derniereReception, setDerniereReception] = useState(null);
+  const [impressionEtiquettesEnCours, setImpressionEtiquettesEnCours] = useState(false);
+  const [erreurEtiquettes, setErreurEtiquettes] = useState('');
+
+  async function imprimerEtiquettesDerniereReception() {
+    if (!derniereReception || derniereReception.length === 0) return;
+    setErreurEtiquettes('');
+    setImpressionEtiquettesEnCours(true);
+    try {
+      const html = await envoyerEtRecupererHtmlAvecAuth('/articles/a-imprimer/etiquettes', {
+        lignes: derniereReception.map((l) => ({ articleId: l.articleId, quantite: l.quantite })),
+      });
+      const fenetre = window.open('', '_blank');
+      fenetre.document.write(html);
+      fenetre.document.close();
+    } catch (err) {
+      setErreurEtiquettes(err.message);
+    } finally {
+      setImpressionEtiquettesEnCours(false);
+    }
+  }
+
   const [receptions, setReceptions] = useState([]);
   const [chargementListe, setChargementListe] = useState(true);
   const [formulaireArticleOuvert, setFormulaireArticleOuvert] = useState(false);
@@ -259,6 +281,8 @@ function OngletReception({ lieux, articles, familles, onFamillesMisesAJour, onAr
         })),
       });
       setSucces('Réception enregistrée avec succès — le stock a été mis à jour.');
+      setDerniereReception(lignes.map((l) => ({ articleId: l.articleId, designation: l.designation, quantite: l.quantite })));
+      setErreurEtiquettes('');
       setLignes([]);
       setFournisseur('');
       setReference('');
@@ -278,6 +302,33 @@ function OngletReception({ lieux, articles, familles, onFamillesMisesAJour, onAr
 
         {erreur && <div style={styles.bandeauErreur}>{erreur}</div>}
         {succes && <div style={styles.bandeauConfirmation}>{succes}</div>}
+
+        {derniereReception && derniereReception.length > 0 && (
+          <div style={{ background: 'var(--cream-deep)', padding: '12px 14px', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 4 }}>
+            <p style={{ fontSize: 13, margin: 0, fontWeight: 600 }}>
+              🖨️ Imprimer les étiquettes de cette réception ({derniereReception.reduce((s, l) => s + l.quantite, 0)} au total)
+            </p>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, opacity: 0.8 }}>
+              {derniereReception.map((l) => (
+                <li key={l.articleId}>{l.designation} — {l.quantite}</li>
+              ))}
+            </ul>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={imprimerEtiquettesDerniereReception}
+                disabled={impressionEtiquettesEnCours}
+                style={{ ...styles.boutonValider, width: 'auto', padding: '8px 14px' }}
+              >
+                {impressionEtiquettesEnCours ? 'Impression…' : 'Imprimer'}
+              </button>
+              <button type="button" onClick={() => setDerniereReception(null)} style={styles.boutonAnnuler}>
+                Fermer
+              </button>
+            </div>
+            {erreurEtiquettes && <p style={{ color: 'var(--error)', fontSize: 12, margin: 0 }}>{erreurEtiquettes}</p>}
+          </div>
+        )}
 
         <div style={styles.ligneChamps}>
           <label style={styles.champLabel}>
