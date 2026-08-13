@@ -137,6 +137,8 @@ export default function Ventes() {
   const [rechercheEnCours, setRechercheEnCours] = useState(false);
   const [remiseMontant, setRemiseMontant] = useState('');
   const [motifRemise, setMotifRemise] = useState('');
+  const [codeDeblocageRemise, setCodeDeblocageRemise] = useState('');
+  const [seuilRemise, setSeuilRemise] = useState(null);
 
   const [lieux, setLieux] = useState([]);
   const [vendeurs, setVendeurs] = useState([]);
@@ -225,6 +227,7 @@ export default function Ventes() {
   useEffect(() => {
     appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
     appelApi('GET', '/clients').then(setClients).catch(() => {});
+    appelApi('GET', '/remises/parametre').then((r) => setSeuilRemise(r.seuil != null ? Number(r.seuil) : null)).catch(() => {});
     chargerVentesEnAttenteServeur();
   }, []);
 
@@ -761,6 +764,7 @@ export default function Ventes() {
     setAvertissementStock('');
     setRemiseMontant('');
     setMotifRemise('');
+    setCodeDeblocageRemise('');
     setClientId('');
     setClientSearch('');
     setCreationClientOuverte(false);
@@ -786,6 +790,7 @@ export default function Ventes() {
 
   const totalBrut = panier.reduce((somme, l) => somme + l.prixUnitaire * l.quantite, 0);
   const remise = Math.min(Number(remiseMontant) || 0, totalBrut);
+  const remiseDepassantSeuil = seuilRemise != null && remise > seuilRemise;
   const totalNet = totalBrut - remise;
   const totalPaiements = paiements.reduce((s, p) => s + p.montant, 0);
   const contributionAvoir = avoirVerifie ? Math.min(Number(avoirVerifie.montant), totalNet) : 0;
@@ -883,6 +888,10 @@ export default function Ventes() {
       setErreurVente('Sélectionnez un vendeur.');
       return;
     }
+    if (remiseDepassantSeuil && !codeDeblocageRemise.trim()) {
+      setErreurVente(`Un code de déblocage administrateur est requis pour une remise supérieure à ${seuilRemise.toLocaleString('fr-FR')} F.`);
+      return;
+    }
     if (!estCredit && paiements.length === 0 && contributionAvoir === 0 && contributionCarteCadeau === 0) {
       setErreurVente('Ajoutez au moins un mode de paiement.');
       return;
@@ -918,6 +927,7 @@ export default function Ventes() {
         typeVente: estCredit ? 'CREDIT' : 'COMPTANT',
         remiseMontant: remise > 0 ? remise : undefined,
         motifRemise: motifRemise || undefined,
+        codeDeblocageRemise: remiseDepassantSeuil ? codeDeblocageRemise.trim() : undefined,
         avoirCode: avoirVerifie ? avoirVerifie.reference : undefined,
         carteCadeauCode: carteCadeauVerifiee ? carteCadeauVerifiee.codeBarre : undefined,
         proFormaId: proFormaChargee ? proFormaChargee.id : undefined,
@@ -1768,6 +1778,19 @@ export default function Ventes() {
                         value={motifRemise}
                         onChange={(e) => setMotifRemise(e.target.value)}
                         placeholder="Optionnel…"
+                      />
+                    </label>
+                  )}
+                  {remiseDepassantSeuil && (
+                    <label style={styles.champLabel}>
+                      Code de déblocage administrateur (requis au-delà de {seuilRemise.toLocaleString('fr-FR')} F)
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        style={styles.champInput}
+                        value={codeDeblocageRemise}
+                        onChange={(e) => setCodeDeblocageRemise(e.target.value)}
+                        placeholder="Code communiqué par l'administrateur…"
                       />
                     </label>
                   )}

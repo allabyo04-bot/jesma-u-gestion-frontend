@@ -7,6 +7,7 @@ const ONGLETS = [
   { id: 'vendeurs', label: 'Vendeurs' },
   { id: 'denominations', label: 'Dénominations cartes cadeaux' },
   { id: 'categories', label: 'Catégories de dépenses' },
+  { id: 'remises', label: 'Remises' },
 ];
 
 export default function Parametres() {
@@ -36,6 +37,7 @@ export default function Parametres() {
       {ongletActif === 'vendeurs' && <OngletVendeurs />}
       {ongletActif === 'denominations' && <OngletDenominations />}
       {ongletActif === 'categories' && <OngletCategories />}
+      {ongletActif === 'remises' && <OngletRemises />}
     </div>
   );
 }
@@ -521,6 +523,140 @@ function OngletCategories() {
   );
 }
 
+// ------------------------------------------------------------
+// ONGLET REMISES (seuil + codes de déblocage à usage unique)
+// ------------------------------------------------------------
+function OngletRemises() {
+  const [seuil, setSeuil] = useState('');
+  const [seuilActuel, setSeuilActuel] = useState(null);
+  const [chargement, setChargement] = useState(true);
+  const [erreur, setErreur] = useState('');
+  const [enregistrementEnCours, setEnregistrementEnCours] = useState(false);
+  const [succesSeuil, setSuccesSeuil] = useState('');
+
+  const [codeGenere, setCodeGenere] = useState(null);
+  const [generationEnCours, setGenerationEnCours] = useState(false);
+  const [erreurCode, setErreurCode] = useState('');
+  const [historique, setHistorique] = useState([]);
+
+  useEffect(() => { chargerSeuil(); chargerHistorique(); }, []);
+
+  function chargerSeuil() {
+    setChargement(true);
+    appelApi('GET', '/remises/parametre')
+      .then((r) => { setSeuilActuel(r.seuil != null ? Number(r.seuil) : null); setSeuil(r.seuil != null ? String(r.seuil) : ''); })
+      .catch((err) => setErreur(err.message))
+      .finally(() => setChargement(false));
+  }
+
+  function chargerHistorique() {
+    appelApi('GET', '/remises/codes-deblocage').then(setHistorique).catch(() => {});
+  }
+
+  async function enregistrerSeuil(e) {
+    e.preventDefault();
+    setErreur('');
+    setSuccesSeuil('');
+    setEnregistrementEnCours(true);
+    try {
+      const r = await appelApi('PUT', '/remises/parametre', { seuil: seuil === '' ? null : Number(seuil) });
+      setSeuilActuel(r.seuil != null ? Number(r.seuil) : null);
+      setSuccesSeuil(r.seuil != null ? 'Seuil enregistré.' : 'Exigence de code désactivée — plus aucun code ne sera demandé.');
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setEnregistrementEnCours(false);
+    }
+  }
+
+  async function genererCode() {
+    setErreurCode('');
+    setCodeGenere(null);
+    setGenerationEnCours(true);
+    try {
+      const r = await appelApi('POST', '/remises/codes-deblocage', {});
+      setCodeGenere(r.code);
+      chargerHistorique();
+    } catch (err) {
+      setErreurCode(err.message);
+    } finally {
+      setGenerationEnCours(false);
+    }
+  }
+
+  return (
+    <div style={styles.carte}>
+      {erreur && <div style={styles.bandeauErreur}>{erreur}</div>}
+      {chargement && <p style={styles.texteMuet}>Chargement…</p>}
+
+      {!chargement && (
+        <>
+          <h3 style={styles.titreCarte}>Seuil de remise sans code</h3>
+          <p style={styles.texteMuet}>
+            {seuilActuel != null
+              ? `Actuellement : un code de déblocage est exigé au-delà de ${seuilActuel.toLocaleString('fr-FR')} F de remise.`
+              : "Actuellement désactivé : aucun code n'est jamais demandé, quel que soit le montant de la remise."}
+          </p>
+          <form onSubmit={enregistrerSeuil} style={styles.formAjout}>
+            <input
+              type="number"
+              min="0"
+              style={styles.champInput}
+              placeholder="Seuil en F (laisser vide pour désactiver)…"
+              value={seuil}
+              onChange={(e) => setSeuil(e.target.value)}
+            />
+            <button type="submit" disabled={enregistrementEnCours} style={styles.boutonAjouter}>
+              {enregistrementEnCours ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </form>
+          {succesSeuil && <p style={{ color: 'var(--gold-deep)', fontWeight: 600, fontSize: 13, marginTop: 8 }}>{succesSeuil}</p>}
+        </>
+      )}
+
+      <hr style={{ margin: '20px 0', border: 'none', borderTop: '1px solid var(--cream-deep)' }} />
+
+      <h3 style={styles.titreCarte}>Générer un code de déblocage</h3>
+      <p style={styles.texteMuet}>
+        Génère un code à usage unique, différent à chaque fois, à communiquer oralement (ou par WhatsApp) au caissier.
+        Il ne resservira plus une fois utilisé — pas besoin de le retenir ni de le changer après coup.
+      </p>
+      {erreurCode && <div style={styles.bandeauErreur}>{erreurCode}</div>}
+      <button onClick={genererCode} disabled={generationEnCours} style={styles.boutonAjouter}>
+        {generationEnCours ? 'Génération…' : '+ Générer un nouveau code'}
+      </button>
+      {codeGenere && (
+        <div style={{
+          marginTop: 14, padding: '16px 20px', borderRadius: 10, background: 'var(--cream)',
+          border: '2px dashed var(--gold-deep)', textAlign: 'center',
+        }}>
+          <p style={{ ...styles.texteMuet, marginBottom: 6 }}>Code à usage unique — communique-le maintenant, il ne sera plus jamais réaffiché :</p>
+          <p style={{ fontSize: 32, fontWeight: 800, letterSpacing: 6, color: 'var(--gold-deep)', margin: 0 }}>{codeGenere}</p>
+        </div>
+      )}
+
+      {historique.length > 0 && (
+        <>
+          <hr style={{ margin: '20px 0', border: 'none', borderTop: '1px solid var(--cream-deep)' }} />
+          <h3 style={styles.titreCarte}>Historique (50 derniers)</h3>
+          <div style={styles.listeSimple}>
+            {historique.map((c) => (
+              <div key={c.id} style={styles.ligneItem}>
+                <span style={{ flex: 1 }}>
+                  {new Date(c.createdAt).toLocaleString('fr-FR')} — généré par {c.creePar || 'inconnu'}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: c.utilise ? 'var(--brown-soft)' : 'var(--gold-deep)' }}>
+                  {c.utilise ? `Utilisé le ${new Date(c.utiliseAt).toLocaleString('fr-FR')}` : 'Non utilisé'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 const styles = {
   page: { padding: 32, fontFamily: 'var(--font-body)', color: 'var(--brown-ink)', display: 'flex', flexDirection: 'column', gap: 16 },
   enTete: { display: 'flex', alignItems: 'center', gap: 16 },
@@ -530,6 +666,7 @@ const styles = {
   navItem: { padding: '8px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', border: '1px solid var(--cream-deep)' },
   navItemActif: { padding: '8px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', background: 'var(--gold-deep)', color: 'var(--white)', fontWeight: 600, border: '1px solid var(--gold-deep)' },
   carte: { background: 'var(--white)', borderRadius: 14, padding: 20, maxWidth: 600 },
+  titreCarte: { fontSize: 16, fontWeight: 700, margin: '0 0 8px 0', color: 'var(--brown-ink)' },
   texteMuet: { fontSize: 13, color: 'var(--brown-soft)' },
   bandeauErreur: { padding: '10px 14px', borderRadius: 8, background: '#FBE4E1', color: 'var(--error)', fontSize: 14, fontWeight: 600, marginBottom: 12 },
   listeSimple: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 },
