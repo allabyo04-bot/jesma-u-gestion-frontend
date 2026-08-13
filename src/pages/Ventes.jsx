@@ -20,7 +20,7 @@ const MODES_PAIEMENT = [
 // ------------------------------------------------------------
 // TICKET DE CAISSE
 // ------------------------------------------------------------
-function construireTicketHtml({ vente, panier, remise, totalNet, paiements, contributionAvoir, avoirReference, contributionCarteCadeau, carteCadeauCode, lieuNom, vendeurNom, estCredit, montantRestant }) {
+function construireTicketHtml({ vente, panier, remise, totalNet, paiements, contributionAvoir, avoirReference, contributionCarteCadeau, carteCadeauCode, lieuNom, vendeurNom, estCredit, montantRestant, achatsRestantsFidelite }) {
   const date = new Date(vente.createdAt || Date.now());
   const dateTexte = date.toLocaleDateString('fr-FR');
   const heureTexte = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
@@ -86,6 +86,8 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   ${contributionCarteCadeau > 0 ? `<div class="ligne-total"><span>Carte cadeau ${carteCadeauCode || ''}</span><span>−${contributionCarteCadeau.toLocaleString('fr-FR')} F</span></div>` : ''}
   ${estCredit && montantRestant > 1 ? `<div class="ligne-total"><span>Reste dû (crédit)</span><span>${montantRestant.toLocaleString('fr-FR')} F</span></div>` : ''}
   <hr>
+  ${achatsRestantsFidelite != null && achatsRestantsFidelite > 1 ? `<div class="pied">🎁 Cher client, encore ${achatsRestantsFidelite} achats de plus de 20 000 F pour bénéficier d'un cadeau spécial à Jesma U !</div><hr>` : ''}
+  ${achatsRestantsFidelite === 1 ? `<div class="pied">🎉 Votre prochain achat de plus de 20 000 F vous donne droit à votre cadeau spécial Jesma U !</div><hr>` : ''}
   <div class="pied">Merci de votre visite !</div>
   <div class="coordonnees">
     L'art d'accueillir la vie et de l'entretenir<br>
@@ -930,6 +932,10 @@ export default function Ventes() {
     try {
       const lieuNom = lieux.find((l) => String(l.id) === String(lieuId))?.nom;
       const vendeurNom = vendeurs.find((v) => String(v.id) === String(vendeurId))?.nomComplet;
+      const clientActuel = clients.find((c) => String(c.id) === String(clientId));
+      const achatsRestantsFidelite = clientActuel && !clientActuel.estComptoir
+        ? Math.max(0, 10 - (clientActuel.achatsConsecutifs || 0))
+        : null;
       const ticketHtml = construireTicketHtml({
         vente,
         panier,
@@ -944,6 +950,7 @@ export default function Ventes() {
         vendeurNom,
         estCredit,
         montantRestant: resteAPayer,
+        achatsRestantsFidelite,
       });
       setDernierTicketHtml(ticketHtml);
       imprimerTicketDepuisHtml(ticketHtml);
