@@ -66,77 +66,66 @@ export default function Dashboard() {
         {erreur && <p style={{ color: '#B23A2E' }}>{erreur}</p>}
 
         {dashboard && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, maxWidth: 800 }}>
-            <div style={{ background: '#FBF3DD', padding: 20, borderRadius: 12 }}>
-              <div style={{ fontSize: 13, opacity: 0.7 }}>Ventes du jour</div>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>{dashboard.ventes.total.toLocaleString('fr-FR')} F</div>
-              <div style={{ fontSize: 12, opacity: 0.6 }}>{dashboard.ventes.nombre} vente(s)</div>
-            </div>
-            <div style={{ background: '#FBF3DD', padding: 20, borderRadius: 12 }}>
-              <div style={{ fontSize: 13, opacity: 0.7 }}>Alertes stock</div>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>{dashboard.alertesStock.length}</div>
-            </div>
-            <div style={{ background: '#FBF3DD', padding: 20, borderRadius: 12 }}>
-              <div style={{ fontSize: 13, opacity: 0.7 }}>Demandes de remise</div>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>{dashboard.demandesRemiseEnAttente}</div>
-            </div>
-            <div
-              style={{ background: '#FBF3DD', padding: 20, borderRadius: 12, cursor: 'pointer' }}
+          <div style={styles.grilleKpi}>
+            <CarteKpi icone="💰" label="Ventes du jour" valeur={`${dashboard.ventes.total.toLocaleString('fr-FR')} F`} sousTexte={`${dashboard.ventes.nombre} vente(s)`} />
+            <CarteKpi
+              icone="📦" label="Alertes stock" valeur={dashboard.alertesStock.length}
+              sousTexte={dashboard.alertesStock.length > 0 ? 'À réapprovisionner' : 'Rien à signaler'}
+              accent={dashboard.alertesStock.length > 0}
+              onClick={() => navigate('/stock')}
+            />
+            <CarteKpi
+              icone="🏷️" label="Demandes de remise" valeur={dashboard.demandesRemiseEnAttente}
+              sousTexte={dashboard.demandesRemiseEnAttente > 0 ? 'En attente de revue' : 'À jour'}
+              accent={dashboard.demandesRemiseEnAttente > 0}
+              onClick={() => navigate('/etats')}
+            />
+            <CarteKpi
+              icone="🎁" label="Listes cadeaux" valeur={`${dashboard.listesCadeaux.listesActives} active(s)`}
               onClick={() => navigate('/listes-cadeaux')}
+              large
             >
-              <div style={{ fontSize: 13, opacity: 0.7 }}>Listes cadeaux</div>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>{dashboard.listesCadeaux.listesActives} active(s)</div>
-              <div style={{ fontSize: 12, opacity: 0.6 }}>
-                {dashboard.listesCadeaux.offresEnAttente > 0
-                  ? `⚠ ${dashboard.listesCadeaux.offresEnAttente} offre(s) à valider`
-                  : 'Aucune offre en attente'}
-              </div>
-              <div style={{ fontSize: 12, opacity: 0.6 }}>
-                {dashboard.listesCadeaux.totalOfferConfirme.toLocaleString('fr-FR')} F offerts au total
-              </div>
-            </div>
+              {dashboard.listesCadeaux.offresEnAttente > 0 ? (
+                <span style={styles.badgeAlerte}>⚠ {dashboard.listesCadeaux.offresEnAttente} offre(s) à valider</span>
+              ) : (
+                <span style={styles.sousTexte}>Aucune offre en attente</span>
+              )}
+              <span style={styles.sousTexte}>{dashboard.listesCadeaux.totalOfferConfirme.toLocaleString('fr-FR')} F offerts au total</span>
+            </CarteKpi>
             {estAdmin && (
               <>
-                <div style={{ background: '#FBF3DD', padding: 20, borderRadius: 12 }}>
-                  <div style={{ fontSize: 13, opacity: 0.7 }}>Remises du jour</div>
-                  <div style={{ fontSize: 24, fontWeight: 700 }}>{dashboard.remises.jour.total.toLocaleString('fr-FR')} F</div>
-                  <div style={{ fontSize: 12, opacity: 0.6 }}>{dashboard.remises.jour.nombre} vente(s) remisée(s)</div>
-                </div>
-                <div style={{ background: '#FBF3DD', padding: 20, borderRadius: 12 }}>
-                  <div style={{ fontSize: 13, opacity: 0.7 }}>Remises du mois en cours</div>
-                  <div style={{ fontSize: 24, fontWeight: 700 }}>{dashboard.remises.mois.total.toLocaleString('fr-FR')} F</div>
-                  <div style={{ fontSize: 12, opacity: 0.6 }}>{dashboard.remises.mois.nombre} vente(s) remisée(s)</div>
-                </div>
+                <CarteKpi icone="📉" label="Remises du jour" valeur={`${dashboard.remises.jour.total.toLocaleString('fr-FR')} F`} sousTexte={`${dashboard.remises.jour.nombre} vente(s) remisée(s)`} />
+                <CarteKpi icone="📊" label="Remises du mois en cours" valeur={`${dashboard.remises.mois.total.toLocaleString('fr-FR')} F`} sousTexte={`${dashboard.remises.mois.nombre} vente(s) remisée(s)`} />
               </>
             )}
           </div>
         )}
 
         {dashboard && estAdmin && dashboard.parBoutique.length > 0 && (
-          <div style={{ marginTop: 32, maxWidth: 800 }}>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
-              Objectif du mois par boutique
-            </h2>
+          <div style={{ marginTop: 40, maxWidth: 860 }}>
+            <h2 style={styles.titreSection}>Objectif du mois par boutique</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {dashboard.parBoutique.map((b) => (
-                <div key={b.lieuId} style={{ background: '#FBF3DD', padding: 20, borderRadius: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                    <span style={{ fontWeight: 700, fontFamily: 'var(--font-display)' }}>{b.nom}</span>
-                    <span style={{ fontSize: 13, opacity: 0.7 }}>
-                      {b.ventesMois.toLocaleString('fr-FR')} F / {b.objectifMensuel.toLocaleString('fr-FR')} F ({b.pourcentageObjectif}%)
+                <div key={b.lieuId} style={styles.carteObjectif}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+                    <span style={{ fontWeight: 700, fontFamily: 'var(--font-display)', fontSize: 17 }}>{b.nom}</span>
+                    <span style={{ fontSize: 13, color: 'var(--brown-soft)' }}>
+                      {b.ventesMois.toLocaleString('fr-FR')} F / {b.objectifMensuel.toLocaleString('fr-FR')} F
+                      <strong style={{ color: 'var(--gold-deep)', marginLeft: 6 }}>{b.pourcentageObjectif}%</strong>
                     </span>
                   </div>
-                  <div style={{ background: 'var(--cream)', borderRadius: 8, height: 14, overflow: 'hidden' }}>
+                  <div style={{ background: 'var(--cream)', borderRadius: 8, height: 12, overflow: 'hidden' }}>
                     <div
                       style={{
                         width: `${Math.min(100, b.pourcentageObjectif)}%`,
                         height: '100%',
                         background: b.pourcentageObjectif >= 100 ? '#1E6B36' : 'var(--gold-deep)',
                         transition: 'width 0.3s',
+                        borderRadius: 8,
                       }}
                     />
                   </div>
-                  <div style={{ display: 'flex', gap: 20, marginTop: 10, fontSize: 13, opacity: 0.8, flexWrap: 'wrap' }}>
+                  <div style={styles.ligneStatsObjectif}>
                     <span style={{ fontWeight: 700 }}>
                       Ventes du jour : {b.ventesJour.total.toLocaleString('fr-FR')} F ({b.ventesJour.nombre} vente(s))
                     </span>
@@ -149,7 +138,7 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
-            <p style={{ fontSize: 12, opacity: 0.6, marginTop: 10 }}>
+            <p style={{ fontSize: 12, color: 'var(--brown-soft)', marginTop: 10 }}>
               L'objectif de chaque boutique se règle dans Paramètres → Lieux.
             </p>
           </div>
@@ -159,13 +148,30 @@ export default function Dashboard() {
   );
 }
 
+function CarteKpi({ icone, label, valeur, sousTexte, accent, onClick, large, children }) {
+  return (
+    <div
+      style={{ ...styles.carteKpi, ...(large ? styles.carteKpiLarge : {}), ...(onClick ? { cursor: 'pointer' } : {}) }}
+      onClick={onClick}
+    >
+      <div style={styles.enTeteKpi}>
+        {icone && <span style={styles.iconeKpi}>{icone}</span>}
+        <span style={styles.labelKpi}>{label}</span>
+      </div>
+      <div style={{ ...styles.valeurKpi, ...(accent ? { color: 'var(--error)' } : {}) }}>{valeur}</div>
+      {sousTexte && <div style={styles.sousTexte}>{sousTexte}</div>}
+      {children}
+    </div>
+  );
+}
+
 const styles = {
-  page: { display: 'flex', minHeight: '100vh', fontFamily: 'sans-serif', color: '#4A2C17' },
+  page: { display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-body)', color: 'var(--brown-ink)' },
   sidebar: {
     width: 220, background: '#FBF3DD', padding: '24px 16px', display: 'flex', flexDirection: 'column',
     gap: 8, flexShrink: 0, borderRight: '1px solid #EAD9AE',
   },
-  marque: { fontWeight: 700, fontSize: 18, letterSpacing: 1, marginBottom: 20, color: '#4A2C17' },
+  marque: { fontWeight: 700, fontSize: 18, letterSpacing: 1, marginBottom: 20, color: '#4A2C17', fontFamily: 'var(--font-display)' },
   nav: { display: 'flex', flexDirection: 'column', gap: 8, flex: 1 },
   boutonNav: {
     padding: '10px 14px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144',
@@ -177,5 +183,33 @@ const styles = {
   },
   pied: { marginTop: 20, fontSize: 11, opacity: 0.45, textAlign: 'center' },
   contenu: { flex: 1, padding: 32 },
-  titre: { marginTop: 0, marginBottom: 24 },
+  titre: { marginTop: 0, marginBottom: 24, fontFamily: 'var(--font-display)' },
+  titreSection: { fontFamily: 'var(--font-display)', fontSize: 19, marginBottom: 14, color: 'var(--brown-ink)' },
+
+  grilleKpi: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, maxWidth: 900 },
+  carteKpi: {
+    background: 'var(--white)', padding: '20px 22px', borderRadius: 14,
+    border: '1px solid var(--cream-deep)', boxShadow: '0 1px 3px rgba(74, 44, 23, 0.06)',
+  },
+  carteKpiLarge: { gridColumn: 'span 2' },
+  enTeteKpi: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 },
+  iconeKpi: { fontSize: 16, lineHeight: 1 },
+  labelKpi: {
+    fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+    color: 'var(--brown-soft)',
+  },
+  valeurKpi: { fontSize: 26, fontWeight: 700, fontFamily: 'var(--font-display)', color: 'var(--brown-ink)', lineHeight: 1.2 },
+  sousTexte: { display: 'block', fontSize: 12.5, color: 'var(--brown-soft)', marginTop: 4 },
+  badgeAlerte: {
+    display: 'inline-block', fontSize: 12, fontWeight: 700, color: 'var(--error)',
+    background: '#FBE4E1', borderRadius: 6, padding: '3px 8px', marginTop: 6,
+  },
+
+  carteObjectif: {
+    background: 'var(--white)', padding: '20px 22px', borderRadius: 14,
+    border: '1px solid var(--cream-deep)', boxShadow: '0 1px 3px rgba(74, 44, 23, 0.06)',
+  },
+  ligneStatsObjectif: {
+    display: 'flex', gap: 20, marginTop: 12, fontSize: 13, color: 'var(--brown-soft)', flexWrap: 'wrap',
+  },
 };
