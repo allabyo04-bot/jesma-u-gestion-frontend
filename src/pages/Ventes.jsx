@@ -17,6 +17,18 @@ const MODES_PAIEMENT = [
   'Wave', 'DJAMO', 'Carte bancaire', 'Avoir',
 ];
 
+// Seuil et palier fidélité (doivent rester alignés avec SEUIL_FIDELITE_MONTANT/ACHATS
+// cote backend, dans venteController.js) : 10 achats consécutifs ≥ 20 000 F donnent
+// droit à un cadeau. On compte la vente en cours dès qu'elle atteint le seuil, pour
+// que le ticket et l'écran client reflètent immédiatement la progression réelle,
+// sans attendre le prochain achat pour que le compteur serveur se mette à jour.
+const SEUIL_FIDELITE_MONTANT = 20000;
+function calculerAchatsRestantsFidelite(clientActuel, totalNetVente) {
+  if (!clientActuel || clientActuel.estComptoir) return null;
+  const compteurProjete = (clientActuel.achatsConsecutifs || 0) + (totalNetVente >= SEUIL_FIDELITE_MONTANT ? 1 : 0);
+  return Math.max(0, 10 - compteurProjete);
+}
+
 // ------------------------------------------------------------
 // TICKET DE CAISSE
 // ------------------------------------------------------------
@@ -226,20 +238,20 @@ export default function Ventes() {
   // montrait donc jamais le panier en cours, seulement l'écran de remerciement final.
   useEffect(() => {
     const clientActuel = clients.find((c) => String(c.id) === String(clientId));
-    const achatsRestants = clientActuel && !clientActuel.estComptoir
-      ? Math.max(0, 10 - (clientActuel.achatsConsecutifs || 0))
-      : null;
-    diffuserEtatPanier({ panier, remise: Math.min(Number(remiseMontant) || 0, panier.reduce((s, l) => s + l.prixUnitaire * l.quantite, 0)), achatsRestantsFidelite: achatsRestants });
+    const totalBrutLive = panier.reduce((s, l) => s + l.prixUnitaire * l.quantite, 0);
+    const remiseLive = Math.min(Number(remiseMontant) || 0, totalBrutLive);
+    const achatsRestants = calculerAchatsRestantsFidelite(clientActuel, totalBrutLive - remiseLive);
+    diffuserEtatPanier({ panier, remise: remiseLive, achatsRestantsFidelite: achatsRestants });
   }, [panier, remiseMontant, clientId, clients]);
 
   useEffect(() => {
     return ecouterCanal((message) => {
       if (message.type === 'DEMANDE_ETAT') {
         const clientActuel = clients.find((c) => String(c.id) === String(clientId));
-        const achatsRestants = clientActuel && !clientActuel.estComptoir
-          ? Math.max(0, 10 - (clientActuel.achatsConsecutifs || 0))
-          : null;
-        diffuserEtatPanier({ panier, remise: Math.min(Number(remiseMontant) || 0, panier.reduce((s, l) => s + l.prixUnitaire * l.quantite, 0)), achatsRestantsFidelite: achatsRestants });
+        const totalBrutLive = panier.reduce((s, l) => s + l.prixUnitaire * l.quantite, 0);
+        const remiseLive = Math.min(Number(remiseMontant) || 0, totalBrutLive);
+        const achatsRestants = calculerAchatsRestantsFidelite(clientActuel, totalBrutLive - remiseLive);
+        diffuserEtatPanier({ panier, remise: remiseLive, achatsRestantsFidelite: achatsRestants });
       }
     });
   }, [panier, remiseMontant, clientId, clients]);
@@ -933,9 +945,7 @@ export default function Ventes() {
       const lieuNom = lieux.find((l) => String(l.id) === String(lieuId))?.nom;
       const vendeurNom = vendeurs.find((v) => String(v.id) === String(vendeurId))?.nomComplet;
       const clientActuel = clients.find((c) => String(c.id) === String(clientId));
-      const achatsRestantsFidelite = clientActuel && !clientActuel.estComptoir
-        ? Math.max(0, 10 - (clientActuel.achatsConsecutifs || 0))
-        : null;
+      const achatsRestantsFidelite = calculerAchatsRestantsFidelite(clientActuel, totalNet);
       const ticketHtml = construireTicketHtml({
         vente,
         panier,
