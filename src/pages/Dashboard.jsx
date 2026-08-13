@@ -154,10 +154,6 @@ export default function Dashboard() {
             </p>
           </div>
         )}
-
-        <p style={{ marginTop: 32, fontSize: 13, opacity: 0.6 }}>
-          Le reste de l'interface (articles, ventes, cartes cadeaux...) arrive dans les prochaines sessions.
-        </p>
       </main>
     </div>
   );
