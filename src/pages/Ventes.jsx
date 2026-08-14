@@ -896,10 +896,6 @@ export default function Ventes() {
       setErreurVente('Ajoutez au moins un mode de paiement.');
       return;
     }
-    if (resteAPayer < -1) {
-      setErreurVente(`Le total des paiements dépasse le montant de ${Math.abs(resteAPayer).toLocaleString('fr-FR')} F.`);
-      return;
-    }
     if (!estCredit && resteAPayer > 1) {
       setErreurVente(`Il reste ${resteAPayer.toLocaleString('fr-FR')} F à couvrir.`);
       return;
