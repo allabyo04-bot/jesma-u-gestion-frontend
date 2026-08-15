@@ -138,6 +138,7 @@ export default function Ventes() {
   const [remiseMontant, setRemiseMontant] = useState('');
   const [motifRemise, setMotifRemise] = useState('');
   const [codeDeblocageRemise, setCodeDeblocageRemise] = useState('');
+  const [demandeCodeEnvoyee, setDemandeCodeEnvoyee] = useState(false);
   const [seuilRemise, setSeuilRemise] = useState(null);
 
   const [lieux, setLieux] = useState([]);
@@ -765,6 +766,7 @@ export default function Ventes() {
     setRemiseMontant('');
     setMotifRemise('');
     setCodeDeblocageRemise('');
+    setDemandeCodeEnvoyee(false);
     setClientId('');
     setClientSearch('');
     setCreationClientOuverte(false);
@@ -889,7 +891,11 @@ export default function Ventes() {
       return;
     }
     if (remiseDepassantSeuil && !codeDeblocageRemise.trim()) {
-      setErreurVente(`Un code de déblocage administrateur est requis pour une remise supérieure à ${seuilRemise.toLocaleString('fr-FR')} F.`);
+      if (!demandeCodeEnvoyee) {
+        appelApi('POST', '/remises/demande-code', { montant: remise }).catch(() => {});
+        setDemandeCodeEnvoyee(true);
+      }
+      setErreurVente(`Un code de déblocage administrateur est requis pour une remise supérieure à ${seuilRemise.toLocaleString('fr-FR')} F. Victoria a été alertée sur son tableau de bord.`);
       return;
     }
     if (!estCredit && paiements.length === 0 && contributionAvoir === 0 && contributionCarteCadeau === 0) {

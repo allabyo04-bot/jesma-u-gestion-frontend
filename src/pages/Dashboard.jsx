@@ -94,6 +94,12 @@ export default function Dashboard() {
             </CarteKpi>
             {estAdmin && (
               <>
+                <CarteKpi
+                  icone="🔓" label="Codes de remise demandés" valeur={dashboard.demandesCodeRemiseEnAttente}
+                  sousTexte={dashboard.demandesCodeRemiseEnAttente > 0 ? "Une caissière attend un code" : 'Aucune demande'}
+                  accent={dashboard.demandesCodeRemiseEnAttente > 0}
+                  onClick={() => navigate('/parametres?onglet=remises')}
+                />
                 <CarteKpi icone="📉" label="Remises du jour" valeur={`${dashboard.remises.jour.total.toLocaleString('fr-FR')} F`} sousTexte={`${dashboard.remises.jour.nombre} vente(s) remisée(s)`} />
                 <CarteKpi icone="📊" label="Remises du mois en cours" valeur={`${dashboard.remises.mois.total.toLocaleString('fr-FR')} F`} sousTexte={`${dashboard.remises.mois.nombre} vente(s) remisée(s)`} />
               </>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { appelApi } from '../lib/api';
 
 const ONGLETS = [
@@ -12,7 +12,8 @@ const ONGLETS = [
 
 export default function Parametres() {
   const navigate = useNavigate();
-  const [ongletActif, setOngletActif] = useState('lieux');
+  const location = useLocation();
+  const [ongletActif, setOngletActif] = useState(new URLSearchParams(location.search).get('onglet') || 'lieux');
 
   return (
     <div style={styles.page}>
