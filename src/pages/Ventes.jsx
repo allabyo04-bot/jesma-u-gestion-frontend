@@ -36,7 +36,6 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   const date = new Date(vente.createdAt || Date.now());
   const dateTexte = date.toLocaleDateString('fr-FR');
   const heureTexte = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  const logoUrl = `${window.location.origin}/logo-jesma-u.png`;
 
   const lignesHtml = panier.map((l) => `
     <tr>
@@ -62,7 +61,6 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   @page { size: 80mm auto; margin: 0; }
   body { font-family: 'Courier New', monospace; width: 76mm; margin: 4mm auto; font-size: 12px; color: #000; }
   .centre { text-align: center; }
-  .logo { max-width: 65mm; max-height: 32mm; margin-bottom: 6px; }
   h1 { font-size: 20px; margin: 0 0 2px 0; font-weight: 900; letter-spacing: 1.5px; }
   .sous-titre { font-size: 11px; margin-bottom: 8px; font-weight: bold; }
   hr { border: none; border-top: 2px dashed #000; margin: 8px 0; }
@@ -78,7 +76,6 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
 </head>
 <body>
   <div class="centre">
-    <img src="${logoUrl}" class="logo" alt="Jesma U" onerror="this.style.display='none'">
     <h1>JESMA U</h1>
     <div class="sous-titre">Grand-Bassam, carrefour rosier 5</div>
     <div class="sous-titre">${lieuNom || ''}</div>
