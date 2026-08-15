@@ -1356,7 +1356,7 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
 
         <label style={styles.champLabel}>
           Désignation *
-          <input style={styles.champInput} value={designation} onChange={(e) => setDesignation(e.target.value)} />
+          <input className="champ-majuscule" style={styles.champInput} value={designation} onChange={(e) => setDesignation(e.target.value)} />
         </label>
 
         {estEdition && (

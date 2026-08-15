@@ -615,7 +615,7 @@ function FormulaireNouvelArticle({ familles, onFamillesMisesAJour, onFermer, onC
 
         <label style={styles.champLabel}>
           Désignation *
-          <input style={styles.champInput} value={designation} onChange={(e) => setDesignation(e.target.value)} />
+          <input className="champ-majuscule" style={styles.champInput} value={designation} onChange={(e) => setDesignation(e.target.value)} />
         </label>
 
         <label style={styles.champLabel}>

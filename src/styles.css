@@ -41,11 +41,10 @@ a {
   outline-offset: 2px;
 }
 
-/* Saisie et recherche toujours affichées en majuscule à l'écran, quel que
-   soit l'état de la touche Maj/Verr. Maj du clavier. Type "password" (PIN)
-   exclu volontairement. La valeur réellement envoyée au serveur est mise
-   en majuscule côté api.js/backend pour les désignations d'articles. */
-input:not([type="password"]):not([type="number"]):not([type="date"]),
-textarea {
+/* Majuscule forcée à l'écran uniquement pour les champs marqués explicitement
+   (désignation d'article) — jamais pour les identifiants de connexion, la
+   recherche, les noms de clients, etc., où ça créait de vraies confusions
+   (deux saisies visuellement identiques mais réellement différentes en casse). */
+.champ-majuscule {
   text-transform: uppercase;
 }
