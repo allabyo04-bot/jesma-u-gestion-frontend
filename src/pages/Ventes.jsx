@@ -117,6 +117,34 @@ function imprimerTicketDepuisHtml(html) {
   fenetre.document.close();
 }
 
+// Régénère un ticket à l'identique pour une vente déjà enregistrée (Historique),
+// à partir des données déjà chargées avec la vente (lignes, paiements, avoir,
+// carte cadeau, lieu, vendeur) — aucun nouvel appel serveur nécessaire.
+function reimprimerTicket(v) {
+  const panierTicket = v.lignes.map((l) => ({
+    designation: l.article.designation,
+    quantite: l.quantite,
+    prixUnitaire: Number(l.prixUnitaire),
+  }));
+  const html = construireTicketHtml({
+    vente: v,
+    panier: panierTicket,
+    remise: Number(v.remiseMontant || 0),
+    totalNet: Number(v.totalNet),
+    paiements: (v.paiements || []).map((p) => ({ mode: p.mode, montant: Number(p.montant) })),
+    contributionAvoir: v.avoirUtilise ? Number(v.avoirUtilise.montant || 0) : 0,
+    avoirReference: v.avoirUtilise?.reference || null,
+    contributionCarteCadeau: v.carteCadeauUtilisee ? Number(v.carteCadeauUtilisee.denomination || 0) : 0,
+    carteCadeauCode: v.carteCadeauUtilisee?.codeBarre || null,
+    lieuNom: v.lieu?.nom,
+    vendeurNom: v.vendeur?.nomComplet,
+    estCredit: v.typeVente === 'CREDIT',
+    montantRestant: 0,
+    achatsRestantsFidelite: null,
+  });
+  imprimerTicketDepuisHtml(html);
+}
+
 export default function Ventes() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1237,6 +1265,9 @@ export default function Ventes() {
                     </div>
                   ) : (
                     <div style={styles.boutonsCarteAttente}>
+                      <button onClick={() => reimprimerTicket(v)} style={styles.boutonReprendre}>
+                        🖨️ Réimprimer
+                      </button>
                       <button onClick={() => ouvrirDemandeAnnulation(v.id)} style={styles.boutonReprendre}>
                         Demander l'annulation
                       </button>
