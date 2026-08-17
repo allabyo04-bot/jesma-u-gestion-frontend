@@ -36,7 +36,7 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   const date = new Date(vente.createdAt || Date.now());
   const dateTexte = date.toLocaleDateString('fr-FR');
   const heureTexte = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  const logoUrl = `${window.location.origin}/logo-jesma-u.png`;
+  const logoUrl = `${window.location.origin}/logo-jesma-u-ticket.png`;
 
   const lignesHtml = panier.map((l) => `
     <tr>
