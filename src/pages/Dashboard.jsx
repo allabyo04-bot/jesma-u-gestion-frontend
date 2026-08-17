@@ -41,7 +41,7 @@ export default function Dashboard() {
   return (
     <div style={styles.page}>
       <aside style={styles.sidebar}>
-        <div style={styles.marque}>JESMA U</div>
+        <img src="/logo-jesma-u.png" alt="Jesma U" style={styles.logoMarque} />
 
         <nav style={styles.nav}>
           {LIENS.filter((lien) => !lien.adminSeulement || estAdmin).map((lien) => (
@@ -178,6 +178,7 @@ const styles = {
     gap: 8, flexShrink: 0, borderRight: '1px solid #EAD9AE',
   },
   marque: { fontWeight: 700, fontSize: 18, letterSpacing: 1, marginBottom: 20, color: '#4A2C17', fontFamily: 'var(--font-display)' },
+  logoMarque: { width: '100%', maxWidth: 180, height: 'auto', marginBottom: 20, display: 'block' },
   nav: { display: 'flex', flexDirection: 'column', gap: 8, flex: 1 },
   boutonNav: {
     padding: '10px 14px', borderRadius: 8, border: '1px solid #D9A144', background: '#D9A144',
