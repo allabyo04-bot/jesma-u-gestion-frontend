@@ -32,8 +32,7 @@ export default function Login() {
         <div className="arc arc--two" />
 
         <div className="brand-mark">
-          <img src="/logo-jesma-u.png" alt="Jesma U" className="u-badge" />
-          <span className="wordmark">Jesma U</span>
+          <img src="/logo-jesma-u.png" alt="Jesma U" className="brand-logo" />
         </div>
 
         <div className="brand-copy">

@@ -41,20 +41,10 @@
   z-index: 1;
 }
 
-.brand-mark .u-badge {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  object-fit: cover;
-  box-shadow: 0 2px 8px rgba(46, 26, 13, 0.3);
-}
-
-.brand-mark .wordmark {
-  font-family: var(--font-display);
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  color: var(--brown-deep);
+.brand-mark .brand-logo {
+  width: 100%;
+  max-width: 260px;
+  height: auto;
 }
 
 .brand-copy {

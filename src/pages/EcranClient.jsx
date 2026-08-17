@@ -53,7 +53,7 @@ export default function EcranClient() {
   return (
     <div style={styles.page}>
       <header style={styles.entete}>
-        <div style={styles.logoRond}>U</div>
+        <img src="/logo-jesma-u.png" alt="Jesma U" style={styles.logoImage} />
         <h1 style={styles.titrePrincipal}>Jesma U</h1>
       </header>
 
@@ -121,11 +121,7 @@ const styles = {
     display: 'flex', alignItems: 'center', gap: 16, padding: '24px 32px',
     background: 'var(--brown-deep)', color: 'var(--cream)',
   },
-  logoRond: {
-    width: 48, height: 48, borderRadius: '50%', background: 'var(--gold-deep)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--white)',
-  },
+  logoImage: { height: 44, width: 'auto' },
   titrePrincipal: { fontFamily: 'var(--font-display)', margin: 0, fontSize: 28 },
   attenteVide: {
     flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',

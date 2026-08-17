@@ -236,12 +236,14 @@ export default function Articles() {
               th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
               th { background: #f2ece1; }
               tfoot td { font-weight: bold; border-top: 2px solid #333; }
+              .logo { width: 40mm; height: auto; margin-bottom: 6px; }
               @media print { body { padding: 0; } }
             </style>
           </head>
           <body>
+            <img src="/logo-jesma-u.png" class="logo" alt="Jesma U" onerror="this.style.display='none'">
             <h1>Recherche : "${texte}"</h1>
-            <h2>Liste des articles — Jesma U — imprimé le ${new Date().toLocaleDateString('fr-FR')}</h2>
+            <h2>Liste des articles — imprimé le ${new Date().toLocaleDateString('fr-FR')}</h2>
             <table>
               <thead>
                 <tr><th>Référence</th><th>Désignation</th><th>Code-barres</th><th style="text-align:right">Prix vente</th><th style="text-align:right">Stock</th></tr>

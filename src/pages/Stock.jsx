@@ -37,12 +37,14 @@ function imprimerTableau(titre, colonnes, lignes) {
   @page { size: A4; margin: 14mm; }
   body { font-family: Arial, sans-serif; color: #2E1A0D; }
   h1 { font-size: 18px; }
+  .logo { width: 45mm; height: auto; margin-bottom: 6px; }
   table { width: 100%; border-collapse: collapse; margin-top: 12px; }
   th, td { padding: 6px 8px; border-bottom: 1px solid #E5D9C3; font-size: 12px; text-align: left; }
   th { background: #F7EFDD; }
 </style></head>
 <body>
-  <h1>Jesma U — ${titre}</h1>
+  <img src="/logo-jesma-u.png" class="logo" alt="Jesma U" onerror="this.style.display='none'">
+  <h1>${titre}</h1>
   <p style="font-size:12px;color:#7A5C3E">${new Date().toLocaleDateString('fr-FR')}</p>
   <table><thead><tr>${enTetes}</tr></thead><tbody>${corps}</tbody></table>
   <script>window.onload = () => window.print();</script>

@@ -31,6 +31,7 @@ function imprimerFermetureCaisse(fermeture, lieuNom) {
   body { font-family: 'Courier New', monospace; width: 76mm; margin: 4mm auto; font-size: 12px; color: #000; }
   .centre { text-align: center; }
   h1 { font-size: 16px; margin: 0 0 2px 0; }
+  .logo { width: 42mm; height: auto; margin: 0 auto 3px auto; display: block; }
   hr { border: none; border-top: 1px dashed #000; margin: 8px 0; }
   .ligne { display: flex; justify-content: space-between; margin: 2px 0; }
   .total { font-weight: bold; font-size: 14px; margin-top: 6px; }
@@ -39,7 +40,7 @@ function imprimerFermetureCaisse(fermeture, lieuNom) {
 </head>
 <body>
   <div class="centre">
-    <h1>JESMA U</h1>
+    <img src="${window.location.origin}/logo-jesma-u.png" class="logo" alt="Jesma U" onerror="this.style.display='none'">
     <div>${lieuNom || 'Toutes les boutiques'}</div>
     <div>Fermeture de caisse — ${fermeture.date}</div>
   </div>
