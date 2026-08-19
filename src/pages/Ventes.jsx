@@ -100,11 +100,7 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   <hr>
   ${achatsRestantsFidelite != null && achatsRestantsFidelite > 1 ? `<div class="pied">Cher client, encore ${achatsRestantsFidelite} achats de plus de 20 000 F pour bénéficier d'un cadeau spécial à Jesma U !</div><hr>` : ''}
   ${achatsRestantsFidelite === 1 ? `<div class="pied">Votre prochain achat de plus de 20 000 F vous donne droit à votre cadeau spécial Jesma U !</div><hr>` : ''}
-  <div class="pied" style="font-weight:normal;">
-    Merci d'être passé(e) chez JESMA U !<br>
-    C'était un plaisir de vous accueillir.<br>
-    Au plaisir de vous revoir très bientôt en boutique !
-  </div>
+  <div class="pied">Merci de votre visite !</div>
   <div class="signature">JESMA U — L'art d'accueillir la vie et de l'entretenir.</div>
   <div class="coordonnees">
     Grand-Bassam, carrefour rosier 5<br>
@@ -115,8 +111,35 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
 </html>`;
 }
 
-function imprimerTicketDepuisHtml(html) {
-  const fenetre = window.open('', '_blank', 'width=380,height=600');
+// Convertit un numéro ivoirien local (ex: 0708735901) au format international
+// pour wa.me. En Côte d'Ivoire, le zéro de tête fait partie du numéro et doit
+// être CONSERVÉ (225 0708735901, jamais 225708735901 qui est invalide).
+function numeroWhatsApp(telephone) {
+  if (!telephone) return null;
+  const chiffres = telephone.replace(/\D/g, '');
+  if (chiffres.length !== 10) return null;
+  return `225${chiffres}`;
+}
+
+function construireMessageWhatsAppVente(vente) {
+  const dateTexte = new Date(vente.createdAt || Date.now()).toLocaleDateString('fr-FR');
+  const lignesTexte = (vente.lignes || [])
+    .map((l) => `${l.article?.designation || ''} ×${l.quantite}`)
+    .join(', ');
+  return [
+    "Merci d'être passé(e) chez JESMA U !",
+    'C\'était un plaisir de vous accueillir.',
+    'Au plaisir de vous revoir très bientôt en boutique !',
+    '',
+    "JESMA U — L'art d'accueillir la vie et de l'entretenir.",
+    '',
+    `Reçu ${vente.numero} — ${dateTexte}`,
+    lignesTexte,
+    `Total : ${Number(vente.totalNet).toLocaleString('fr-FR')} F`,
+  ].join('\n');
+}
+
+function imprimerTicketDepuisHtml(html) {  const fenetre = window.open('', '_blank', 'width=380,height=600');
   if (!fenetre) return;
   fenetre.document.write(html);
   fenetre.document.close();
@@ -1693,6 +1716,16 @@ export default function Ventes() {
                   >
                     🖨️ Réimprimer le ticket
                   </button>
+                )}
+                {numeroWhatsApp(confirmation.client?.telephone) && (
+                  <a
+                    href={`https://wa.me/${numeroWhatsApp(confirmation.client.telephone)}?text=${encodeURIComponent(construireMessageWhatsAppVente(confirmation))}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ ...styles.boutonAjouterPaiement, marginLeft: 8, textDecoration: 'none', display: 'inline-block' }}
+                  >
+                    💬 WhatsApp
+                  </a>
                 )}
               </div>
             )}
