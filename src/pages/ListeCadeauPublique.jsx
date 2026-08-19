@@ -152,6 +152,17 @@ export default function ListeCadeauPublique() {
       </header>
 
       <div style={styles.contenu}>
+        <div style={styles.messageBienvenue}>
+          Bienvenue sur la liste de cadeau de naissance de bébé "{liste.nomDestinataire || liste.client.nomComplet}" !
+          <br /><br />
+          Nous avons soigneusement sélectionné chez JESMA U les essentiels pour préparer son arrivée.
+          <br /><br />
+          Faites votre choix parmi notre sélection et participez à ce merveilleux moment avec un cadeau qui fera vraiment plaisir.
+          <br /><br />
+          Merci pour votre attention et votre générosité.
+          <div style={styles.signatureBienvenue}>JESMA U<br />L'art d'accueillir la vie et de l'entretenir.</div>
+        </div>
+
         <h2 style={styles.titreListe}>{liste.titre || `Liste de ${liste.client.nomComplet}`}</h2>
         <p style={styles.texteMuet}>Pour {liste.client.nomComplet}</p>
 
@@ -295,6 +306,11 @@ const styles = {
   sousTitre: { margin: 0, fontSize: 13, opacity: 0.85 },
   slogan: { margin: '2px 0 4px', fontSize: 12, fontStyle: 'italic', opacity: 0.8 },
   contenu: { maxWidth: 640, margin: '0 auto', padding: '24px 20px' },
+  messageBienvenue: {
+    background: 'var(--cream)', border: '1px solid var(--cream-deep)', borderRadius: 12,
+    padding: '18px 20px', margin: '0 0 24px 0', fontSize: 14, lineHeight: 1.6, color: 'var(--brown-ink)',
+  },
+  signatureBienvenue: { marginTop: 14, fontStyle: 'italic', fontSize: 13, textAlign: 'center' },
   titreListe: { fontFamily: 'var(--font-display)', fontSize: 26, margin: '0 0 4px 0' },
   texteMuet: { fontSize: 13, color: 'var(--brown-soft)', margin: 0 },
   texteAide: { fontSize: 12, color: 'var(--brown-soft)', margin: '-4px 0 0 0', fontStyle: 'italic' },

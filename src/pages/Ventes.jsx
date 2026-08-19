@@ -74,6 +74,7 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   .total-final { font-weight: 900; font-size: 15px; margin-top: 6px; border-top: 1px solid #000; padding-top: 4px; }
   .pied { text-align: center; margin-top: 12px; font-size: 12px; font-weight: bold; }
   .coordonnees { text-align: center; margin-top: 4px; font-size: 10px; line-height: 1.6; font-weight: bold; }
+  .signature { text-align: center; font-style: italic; font-size: 11px; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -97,11 +98,15 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
   ${contributionCarteCadeau > 0 ? `<div class="ligne-total"><span>Carte cadeau ${carteCadeauCode || ''}</span><span>−${contributionCarteCadeau.toLocaleString('fr-FR')} F</span></div>` : ''}
   ${estCredit && montantRestant > 1 ? `<div class="ligne-total"><span>Reste dû (crédit)</span><span>${montantRestant.toLocaleString('fr-FR')} F</span></div>` : ''}
   <hr>
-  ${achatsRestantsFidelite != null && achatsRestantsFidelite > 1 ? `<div class="pied">🎁 Cher client, encore ${achatsRestantsFidelite} achats de plus de 20 000 F pour bénéficier d'un cadeau spécial à Jesma U !</div><hr>` : ''}
-  ${achatsRestantsFidelite === 1 ? `<div class="pied">🎉 Votre prochain achat de plus de 20 000 F vous donne droit à votre cadeau spécial Jesma U !</div><hr>` : ''}
-  <div class="pied">Merci de votre visite !</div>
+  ${achatsRestantsFidelite != null && achatsRestantsFidelite > 1 ? `<div class="pied">Cher client, encore ${achatsRestantsFidelite} achats de plus de 20 000 F pour bénéficier d'un cadeau spécial à Jesma U !</div><hr>` : ''}
+  ${achatsRestantsFidelite === 1 ? `<div class="pied">Votre prochain achat de plus de 20 000 F vous donne droit à votre cadeau spécial Jesma U !</div><hr>` : ''}
+  <div class="pied" style="font-weight:normal;">
+    Merci d'être passé(e) chez JESMA U !<br>
+    C'était un plaisir de vous accueillir.<br>
+    Au plaisir de vous revoir très bientôt en boutique !
+  </div>
+  <div class="signature">JESMA U — L'art d'accueillir la vie et de l'entretenir.</div>
   <div class="coordonnees">
-    L'art d'accueillir la vie et de l'entretenir<br>
     Grand-Bassam, carrefour rosier 5<br>
     WhatsApp +225 07 69 535 786
   </div>
