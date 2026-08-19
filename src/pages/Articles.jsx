@@ -1088,6 +1088,15 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
   const [correctionEnCours, setCorrectionEnCours] = useState(false);
   const [messageCorrection, setMessageCorrection] = useState('');
   const [erreurCorrection, setErreurCorrection] = useState('');
+  const [stockParLieu, setStockParLieu] = useState([]);
+
+  useEffect(() => {
+    if (estEdition) {
+      appelApi('GET', `/articles/${articleEnEdition.id}/stock-par-lieu`).then(setStockParLieu).catch(() => {});
+    }
+  }, [estEdition]);
+
+  const stockLieuActuel = stockParLieu.find((s) => String(s.lieuId) === String(lieuCorrectionId));
 
   async function corrigerStock() {
     if (!lieuCorrectionId || quantiteReelleCorrection === '') {
@@ -1108,6 +1117,7 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
           : 'Aucun écart — la quantité était déjà correcte.'
       );
       setQuantiteReelleCorrection('');
+      appelApi('GET', `/articles/${articleEnEdition.id}/stock-par-lieu`).then(setStockParLieu).catch(() => {});
       if (onModifie) onModifie({ ...articleEnEdition, stockActuel: (articleEnEdition.stockActuel || 0) + (resultat.ecart || 0) });
     } catch (err) {
       setErreurCorrection(err.message);
@@ -1518,6 +1528,11 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
                 {correctionEnCours ? 'Correction…' : 'Corriger'}
               </button>
             </div>
+            {lieuCorrectionId && (
+              <p style={{ fontSize: 12, color: 'var(--brown-soft)', margin: '6px 0 0' }}>
+                Stock actuel enregistré à ce lieu : <strong>{stockLieuActuel ? stockLieuActuel.quantite : 0}</strong>
+              </p>
+            )}
           </div>
         )}
 
