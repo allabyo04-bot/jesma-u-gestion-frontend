@@ -121,21 +121,13 @@ function numeroWhatsApp(telephone) {
   return `225${chiffres}`;
 }
 
-function construireMessageWhatsAppVente(vente) {
-  const dateTexte = new Date(vente.createdAt || Date.now()).toLocaleDateString('fr-FR');
-  const lignesTexte = (vente.lignes || [])
-    .map((l) => `${l.article?.designation || ''} ×${l.quantite}`)
-    .join(', ');
+function construireMessageWhatsAppVente() {
   return [
     "Merci d'être passé(e) chez JESMA U !",
     'C\'était un plaisir de vous accueillir.',
     'Au plaisir de vous revoir très bientôt en boutique !',
     '',
-    "JESMA U — L'art d'accueillir la vie et de l'entretenir.",
-    '',
-    `Reçu ${vente.numero} — ${dateTexte}`,
-    lignesTexte,
-    `Total : ${Number(vente.totalNet).toLocaleString('fr-FR')} F`,
+    "_JESMA U — L'art d'accueillir la vie et de l'entretenir._",
   ].join('\n');
 }
 
@@ -1719,7 +1711,7 @@ export default function Ventes() {
                 )}
                 {numeroWhatsApp(confirmation.client?.telephone) && (
                   <a
-                    href={`https://wa.me/${numeroWhatsApp(confirmation.client.telephone)}?text=${encodeURIComponent(construireMessageWhatsAppVente(confirmation))}`}
+                    href={`https://wa.me/${numeroWhatsApp(confirmation.client.telephone)}?text=${encodeURIComponent(construireMessageWhatsAppVente())}`}
                     target="_blank"
                     rel="noreferrer"
                     style={{ ...styles.boutonAjouterPaiement, marginLeft: 8, textDecoration: 'none', display: 'inline-block' }}
