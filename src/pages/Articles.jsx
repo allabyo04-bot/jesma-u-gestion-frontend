@@ -1076,13 +1076,45 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
   }
 
   useEffect(() => {
-    if (!estEdition) {
-      appelApi('GET', '/stock/lieux').then((l) => {
-        setLieuxStock(l);
-        if (l.length === 1) setLieuStockId(String(l[0].id));
-      }).catch(() => {});
-    }
+    appelApi('GET', '/stock/lieux').then((l) => {
+      setLieuxStock(l);
+      if (l.length === 1) { setLieuStockId(String(l[0].id)); setLieuCorrectionId(String(l[0].id)); }
+    }).catch(() => {});
   }, [estEdition]);
+
+  // --- Correction rapide du stock (article déjà créé uniquement) ---
+  const [lieuCorrectionId, setLieuCorrectionId] = useState('');
+  const [quantiteReelleCorrection, setQuantiteReelleCorrection] = useState('');
+  const [correctionEnCours, setCorrectionEnCours] = useState(false);
+  const [messageCorrection, setMessageCorrection] = useState('');
+  const [erreurCorrection, setErreurCorrection] = useState('');
+
+  async function corrigerStock() {
+    if (!lieuCorrectionId || quantiteReelleCorrection === '') {
+      setErreurCorrection('Choisissez un lieu et indiquez la quantité réellement comptée.');
+      return;
+    }
+    setErreurCorrection('');
+    setMessageCorrection('');
+    setCorrectionEnCours(true);
+    try {
+      const resultat = await appelApi('POST', `/articles/${articleEnEdition.id}/corriger-stock`, {
+        lieuId: Number(lieuCorrectionId),
+        quantiteReelle: Number(quantiteReelleCorrection),
+      });
+      setMessageCorrection(
+        resultat.ecart
+          ? `Stock corrigé : ${resultat.ancienStock} → ${resultat.nouveauStock} (écart ${resultat.ecart > 0 ? '+' : ''}${resultat.ecart}).`
+          : 'Aucun écart — la quantité était déjà correcte.'
+      );
+      setQuantiteReelleCorrection('');
+      if (onModifie) onModifie({ ...articleEnEdition, stockActuel: (articleEnEdition.stockActuel || 0) + (resultat.ecart || 0) });
+    } catch (err) {
+      setErreurCorrection(err.message);
+    } finally {
+      setCorrectionEnCours(false);
+    }
+  }
 
   async function gererAjoutPhotoFormulaire(e) {
     const fichier = e.target.files[0];
@@ -1455,6 +1487,40 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
           </p>
         )}
 
+        {estEdition && (
+          <div style={styles.blocCorrectionStock}>
+            <p style={styles.titreBlocCorrection}>Corriger le stock de cet article</p>
+            <p style={{ fontSize: 12, color: 'var(--brown-soft)', margin: '0 0 8px' }}>
+              Pour un ajustement ponctuel (ex. après un comptage) — indique la quantité réellement présente, le système calcule et applique l'écart automatiquement.
+            </p>
+            {erreurCorrection && <p style={{ color: 'var(--error)', fontSize: 12 }}>{erreurCorrection}</p>}
+            {messageCorrection && <p style={{ color: 'var(--gold-deep)', fontSize: 12, fontWeight: 600 }}>{messageCorrection}</p>}
+            <div style={styles.ligneAvecBouton}>
+              <select
+                style={{ ...styles.champInput, flex: 1 }}
+                value={lieuCorrectionId}
+                onChange={(e) => setLieuCorrectionId(e.target.value)}
+              >
+                <option value="">Lieu…</option>
+                {lieuxStock.map((l) => (
+                  <option key={l.id} value={l.id}>{l.nom}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min="0"
+                style={{ ...styles.champInput, flex: 1 }}
+                placeholder="Quantité réellement comptée…"
+                value={quantiteReelleCorrection}
+                onChange={(e) => setQuantiteReelleCorrection(e.target.value)}
+              />
+              <button type="button" onClick={corrigerStock} disabled={correctionEnCours} style={styles.boutonSecondaire}>
+                {correctionEnCours ? 'Correction…' : 'Corriger'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <label style={styles.champLabel}>
           Famille *
           <div style={styles.ligneAvecBouton}>
@@ -1607,6 +1673,15 @@ const styles = {
   champInput: { padding: '10px 12px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14 },
   champTextarea: { padding: '10px 12px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14, fontFamily: 'inherit', minHeight: 70, resize: 'vertical' },
   ligneAvecBouton: { display: 'flex', gap: 6, alignItems: 'stretch' },
+  boutonSecondaire: {
+    padding: '0 16px', borderRadius: 8, border: '1px solid var(--gold-deep)', background: 'transparent',
+    color: 'var(--gold-deep)', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+  },
+  blocCorrectionStock: {
+    background: 'var(--cream)', border: '1px solid var(--cream-deep)', borderRadius: 10,
+    padding: '12px 14px', margin: '4px 0 16px',
+  },
+  titreBlocCorrection: { fontWeight: 700, fontSize: 13, margin: '0 0 4px' },
   boutonPlus: { padding: '0 14px', borderRadius: 8, border: 'none', background: 'var(--gold-mid)', color: 'var(--white)', cursor: 'pointer', fontWeight: 700, fontSize: 16 },
   blocCreationRapide: { display: 'flex', gap: 6, padding: 10, background: 'var(--cream)', borderRadius: 8 },
   boutonValiderPetit: { padding: '8px 12px', borderRadius: 6, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' },
