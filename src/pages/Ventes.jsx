@@ -114,9 +114,17 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
 // Convertit un numéro ivoirien local (ex: 0708735901) au format international
 // pour wa.me. En Côte d'Ivoire, le zéro de tête fait partie du numéro et doit
 // être CONSERVÉ (225 0708735901, jamais 225708735901 qui est invalide).
+// Tolérant sur la saisie : espaces/tirets ignorés, "+225" ou "225" déjà présent
+// accepté (retiré puis reconstruit), pour ne pas dépendre d'un format unique
+// de saisie du numéro client.
 function numeroWhatsApp(telephone) {
   if (!telephone) return null;
-  const chiffres = telephone.replace(/\D/g, '');
+  let chiffres = telephone.replace(/\D/g, '');
+  if (chiffres.length === 13 && chiffres.startsWith('225')) {
+    chiffres = chiffres.slice(3);
+  } else if (chiffres.length === 12 && chiffres.startsWith('225')) {
+    chiffres = chiffres.slice(2); // cas rare : 225 suivi d'un numero a 9 chiffres (0 deja retire)
+  }
   if (chiffres.length !== 10) return null;
   return `225${chiffres}`;
 }
@@ -1718,6 +1726,11 @@ export default function Ventes() {
                   >
                     💬 WhatsApp
                   </a>
+                )}
+                {confirmation.client && !confirmation.client.estComptoir && !numeroWhatsApp(confirmation.client.telephone) && (
+                  <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--brown-soft)' }}>
+                    (Pas de numéro WhatsApp valide pour ce client)
+                  </span>
                 )}
               </div>
             )}
