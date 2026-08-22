@@ -6,6 +6,10 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'https://jesma-u-gestion-backen
 
 export default function Articles() {
   const navigate = useNavigate();
+  const [decalageX, setDecalageX] = useState(() => localStorage.getItem('jesma_etiquette_decalage_x') || '0');
+  const [decalageY, setDecalageY] = useState(() => localStorage.getItem('jesma_etiquette_decalage_y') || '0');
+  useEffect(() => { localStorage.setItem('jesma_etiquette_decalage_x', decalageX); }, [decalageX]);
+  useEffect(() => { localStorage.setItem('jesma_etiquette_decalage_y', decalageY); }, [decalageY]);
   const [articles, setArticles] = useState([]);
   const [familles, setFamilles] = useState([]);
   const [erreur, setErreur] = useState('');
@@ -327,7 +331,7 @@ export default function Articles() {
     setImpressionEnCours(true);
     setErreurEtiquettes('');
     try {
-      const html = await envoyerEtRecupererHtmlAvecAuth('/articles/a-imprimer/etiquettes', { lignes });
+      const html = await envoyerEtRecupererHtmlAvecAuth('/articles/a-imprimer/etiquettes', { lignes, decalageX, decalageY });
       const fenetre = window.open('', '_blank');
       fenetre.document.write(html);
       fenetre.document.close();
@@ -372,6 +376,8 @@ export default function Articles() {
     try {
       const html = await envoyerEtRecupererHtmlAvecAuth('/articles/a-imprimer/etiquettes', {
         lignes: [{ articleId: articleChoisiReimpression.id, quantite }],
+        decalageX: localStorage.getItem('jesma_etiquette_decalage_x') || 0,
+        decalageY: localStorage.getItem('jesma_etiquette_decalage_y') || 0,
       });
       const fenetre = window.open('', '_blank');
       fenetre.document.write(html);
@@ -473,6 +479,33 @@ export default function Articles() {
             <p style={{ fontSize: 13, color: 'var(--brown-soft)', marginTop: -8 }}>
               La quantité proposée correspond à ce qui a été mis en stock — modifie-la si besoin avant d'imprimer.
             </p>
+
+            <div style={styles.blocCalibrage}>
+              <p style={{ fontWeight: 700, fontSize: 12, margin: '0 0 4px' }}>Calibrage de la planche (une fois par imprimante)</p>
+              <p style={{ fontSize: 11, color: 'var(--brown-soft)', margin: '0 0 6px' }}>
+                Si les étiquettes imprimées ne tombent pas exactement sur la planche, ajuste ces décalages (en mm) puis réimprime — le réglage est mémorisé pour les prochaines fois.
+              </p>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <label style={{ fontSize: 12 }}>
+                  Horizontal (mm)
+                  <input
+                    type="number" step="0.5"
+                    style={{ ...styles.champQuantite, width: 70, marginLeft: 6 }}
+                    value={decalageX}
+                    onChange={(e) => setDecalageX(e.target.value)}
+                  />
+                </label>
+                <label style={{ fontSize: 12 }}>
+                  Vertical (mm)
+                  <input
+                    type="number" step="0.5"
+                    style={{ ...styles.champQuantite, width: 70, marginLeft: 6 }}
+                    value={decalageY}
+                    onChange={(e) => setDecalageY(e.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
 
             {erreurEtiquettes && <p style={{ color: 'var(--error)' }}>{erreurEtiquettes}</p>}
             {chargementEtiquettes && <p>Chargement…</p>}
@@ -1063,6 +1096,8 @@ function FormulaireArticle({ familles, articleEnEdition, onFermer, onFamillesMis
     try {
       const html = await envoyerEtRecupererHtmlAvecAuth('/articles/a-imprimer/etiquettes', {
         lignes: [{ articleId: articleCree.id, quantite }],
+        decalageX: localStorage.getItem('jesma_etiquette_decalage_x') || 0,
+        decalageY: localStorage.getItem('jesma_etiquette_decalage_y') || 0,
       });
       const fenetre = window.open('', '_blank');
       fenetre.document.write(html);
@@ -1707,6 +1742,10 @@ const styles = {
   listeEtiquettes: { display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 320, overflowY: 'auto' },
   ligneEtiquette: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: 'var(--cream)' },
   champQuantite: { width: 70, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14, textAlign: 'center' },
+  blocCalibrage: {
+    background: 'var(--cream)', border: '1px solid var(--cream-deep)', borderRadius: 10,
+    padding: '10px 12px', margin: '4px 0 14px',
+  },
   champQuantite2: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14, boxSizing: 'border-box' },
   boutonEditer: { border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--brown-soft)', fontSize: 13 },
 };
