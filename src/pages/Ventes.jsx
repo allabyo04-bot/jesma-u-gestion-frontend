@@ -1296,6 +1296,16 @@ export default function Ventes() {
                       <button onClick={() => reimprimerTicket(v)} style={styles.boutonReprendre}>
                         🖨️ Réimprimer
                       </button>
+                      {numeroWhatsApp(v.client?.telephone) && (
+                        <a
+                          href={`https://wa.me/${numeroWhatsApp(v.client.telephone)}?text=${encodeURIComponent(construireMessageWhatsAppVente())}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ ...styles.boutonReprendre, textDecoration: 'none', display: 'inline-block' }}
+                        >
+                          💬 WhatsApp
+                        </a>
+                      )}
                       <button onClick={() => ouvrirDemandeAnnulation(v.id)} style={styles.boutonReprendre}>
                         Demander l'annulation
                       </button>
