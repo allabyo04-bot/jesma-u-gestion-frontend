@@ -111,6 +111,62 @@ function construireTicketHtml({ vente, panier, remise, totalNet, paiements, cont
 </html>`;
 }
 
+// Reçu imprimable après un versement sur une vente à crédit — reprend le même
+// habillage que le ticket de vente (logo, coordonnées), mais résume juste le
+// versement et le nouveau solde, plutôt que de reprendre toutes les lignes
+// d'articles de la vente d'origine.
+function construireRecuReglementHtml({ vente, reglement, totalPayeApres, montantRestantApres }) {
+  const date = new Date(reglement.createdAt || Date.now());
+  const dateTexte = date.toLocaleDateString('fr-FR');
+  const heureTexte = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const logoUrl = `${window.location.origin}/logo-jesma-u-ticket.png`;
+
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Reçu de versement — ${vente.numero}</title>
+<style>
+  @page { size: 80mm auto; margin: 0; }
+  body { font-family: 'Courier New', monospace; width: 76mm; margin: 4mm auto; font-size: 12px; color: #000; }
+  .centre { text-align: center; }
+  .logo { width: 52mm; height: auto; margin: 0 auto 3px auto; display: block; }
+  .sous-titre { font-size: 11px; margin-bottom: 8px; font-weight: bold; }
+  hr { border: none; border-top: 2px dashed #000; margin: 8px 0; }
+  .titre-recu { font-weight: 900; font-size: 14px; margin: 6px 0; text-transform: uppercase; }
+  .ligne-total { display: flex; justify-content: space-between; margin: 3px 0; }
+  .total-final { font-weight: 900; font-size: 15px; margin-top: 6px; border-top: 1px solid #000; padding-top: 4px; }
+  .pied { text-align: center; margin-top: 12px; font-size: 12px; font-weight: bold; }
+  .signature { text-align: center; font-style: italic; font-size: 11px; margin-top: 2px; }
+</style>
+</head>
+<body>
+  <div class="centre">
+    <img src="${logoUrl}" class="logo" alt="Jesma U" onerror="this.style.display='none'">
+    <div class="sous-titre">Grand-Bassam, carrefour rosier 5</div>
+    <div class="sous-titre">${vente.lieu?.nom || ''}</div>
+    <div>${dateTexte} — ${heureTexte}</div>
+    <div class="titre-recu">Reçu de versement</div>
+    <div>Vente d'origine : ${vente.numero}</div>
+    ${vente.client ? `<div>Client : ${vente.client.nomComplet}</div>` : ''}
+    ${vente.vendeur ? `<div>Vendeur : ${vente.vendeur.nomComplet}</div>` : ''}
+  </div>
+  <hr>
+  <div class="ligne-total"><span>Total de la vente</span><span>${Number(vente.totalNet).toLocaleString('fr-FR')} F</span></div>
+  <div class="ligne-total"><span>Versement (${reglement.mode})</span><span>${Number(reglement.montant).toLocaleString('fr-FR')} F</span></div>
+  <div class="ligne-total"><span>Total déjà payé</span><span>${totalPayeApres.toLocaleString('fr-FR')} F</span></div>
+  <div class="ligne-total total-final">
+    <span>${montantRestantApres > 1 ? 'RESTE DÛ' : 'SOLDÉ'}</span>
+    <span>${montantRestantApres > 1 ? montantRestantApres.toLocaleString('fr-FR') + ' F' : '0 F'}</span>
+  </div>
+  <hr>
+  <div class="pied">Merci de votre visite !</div>
+  <div class="signature">JESMA U — L'art d'accueillir la vie et de l'entretenir.</div>
+  <script>window.onload = () => window.print();</script>
+</body>
+</html>`;
+}
+
 // Convertit un numéro ivoirien local (ex: 0708735901) au format international
 // pour wa.me. En Côte d'Ivoire, le zéro de tête fait partie du numéro et doit
 // être CONSERVÉ (225 0708735901, jamais 225708735901 qui est invalide).
@@ -419,9 +475,11 @@ export default function Ventes() {
     }
     setReglementEnCours(true);
     try {
-      await appelApi('POST', `/credits/${venteId}/reglements`, { montant, mode: modeReglement });
+      const resultat = await appelApi('POST', `/credits/${venteId}/reglements`, { montant, mode: modeReglement });
       fermerFormulaireReglement();
       await chargerCredits();
+      const html = construireRecuReglementHtml(resultat);
+      imprimerTicketDepuisHtml(html);
     } catch (err) {
       setCreditErreur(err.message);
     } finally {

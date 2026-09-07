@@ -933,22 +933,63 @@ function OngletTransferts({ lieux, articles }) {
 function OngletHistorique({ articles, lieux }) {
   const [articleFiltre, setArticleFiltre] = useState('');
   const [lieuFiltre, setLieuFiltre] = useState('');
+  const [typeFiltre, setTypeFiltre] = useState('');
+  const [dateDebut, setDateDebut] = useState('');
+  const [dateFin, setDateFin] = useState('');
   const [mouvements, setMouvements] = useState([]);
   const [chargement, setChargement] = useState(true);
+  const [impressionEtiquettesHistoriqueEnCours, setImpressionEtiquettesHistoriqueEnCours] = useState(false);
+  const [erreurEtiquettesHistorique, setErreurEtiquettesHistorique] = useState('');
 
   useEffect(() => {
     chargerMouvements();
-  }, [articleFiltre, lieuFiltre]);
+  }, [articleFiltre, lieuFiltre, typeFiltre, dateDebut, dateFin]);
 
   function chargerMouvements() {
     setChargement(true);
     const params = new URLSearchParams();
     if (articleFiltre) params.set('articleId', articleFiltre);
     if (lieuFiltre) params.set('lieuId', lieuFiltre);
+    if (typeFiltre) params.set('type', typeFiltre);
+    if (dateDebut) params.set('dateDebut', dateDebut);
+    if (dateFin) params.set('dateFin', dateFin);
     appelApi('GET', `/stock/mouvements?${params.toString()}`)
       .then(setMouvements)
       .catch(() => {})
       .finally(() => setChargement(false));
+  }
+
+  async function imprimerEtiquettesMouvementsAffiches() {
+    // Regroupe les quantités par article (un même article peut apparaître
+    // plusieurs fois sur la période) et ignore les quantités négatives
+    // (sorties, annulations...) qui ne représentent pas une réception réelle.
+    const totauxParArticle = {};
+    for (const m of mouvements) {
+      if (m.quantite > 0) {
+        totauxParArticle[m.articleId] = (totauxParArticle[m.articleId] || 0) + m.quantite;
+      }
+    }
+    const lignes = Object.entries(totauxParArticle).map(([articleId, quantite]) => ({ articleId: Number(articleId), quantite }));
+    if (lignes.length === 0) {
+      setErreurEtiquettesHistorique("Aucune quantité positive à imprimer dans les mouvements affichés (essaie de filtrer sur le type 'Réception').");
+      return;
+    }
+    setErreurEtiquettesHistorique('');
+    setImpressionEtiquettesHistoriqueEnCours(true);
+    try {
+      const html = await envoyerEtRecupererHtmlAvecAuth('/articles/a-imprimer/etiquettes', {
+        lignes,
+        decalageX: localStorage.getItem('jesma_etiquette_decalage_x') || 0,
+        decalageY: localStorage.getItem('jesma_etiquette_decalage_y') || 0,
+      });
+      const fenetre = window.open('', '_blank');
+      fenetre.document.write(html);
+      fenetre.document.close();
+    } catch (err) {
+      setErreurEtiquettesHistorique(err.message);
+    } finally {
+      setImpressionEtiquettesHistoriqueEnCours(false);
+    }
   }
 
   return (
@@ -972,7 +1013,44 @@ function OngletHistorique({ articles, lieux }) {
             ))}
           </select>
         </label>
+        <label style={styles.champLabel}>
+          Type de mouvement
+          <select style={styles.champInput} value={typeFiltre} onChange={(e) => setTypeFiltre(e.target.value)}>
+            <option value="">Tous les types</option>
+            {Object.entries(LIBELLES_TYPE).map(([valeur, libelle]) => (
+              <option key={valeur} value={valeur}>{libelle}</option>
+            ))}
+          </select>
+        </label>
+        <label style={styles.champLabel}>
+          Du
+          <input type="date" style={styles.champInput} value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} />
+        </label>
+        <label style={styles.champLabel}>
+          Au
+          <input type="date" style={styles.champInput} value={dateFin} onChange={(e) => setDateFin(e.target.value)} />
+        </label>
       </div>
+
+      {(dateDebut || dateFin || typeFiltre) && (
+        <p style={{ fontSize: 12, color: 'var(--brown-soft)', margin: '4px 0 10px' }}>
+          {mouvements.length} résultat(s){mouvements.length === 200 ? ' (limité aux 200 plus récents — affine les filtres si besoin)' : ''}
+        </p>
+      )}
+
+      {mouvements.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          {erreurEtiquettesHistorique && <p style={{ color: 'var(--error)', fontSize: 13 }}>{erreurEtiquettesHistorique}</p>}
+          <button
+            type="button"
+            onClick={imprimerEtiquettesMouvementsAffiches}
+            disabled={impressionEtiquettesHistoriqueEnCours}
+            style={styles.boutonValider}
+          >
+            {impressionEtiquettesHistoriqueEnCours ? 'Préparation…' : '🖨️ Imprimer les étiquettes de ces mouvements'}
+          </button>
+        </div>
+      )}
 
       {chargement && <p style={styles.texteMuet}>Chargement…</p>}
       {!chargement && mouvements.length === 0 && (
