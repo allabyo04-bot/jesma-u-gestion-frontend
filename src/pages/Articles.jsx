@@ -400,6 +400,8 @@ export default function Articles() {
     setFormulaireOuvert(true);
   }
 
+  const [articleAffiche, setArticleAffiche] = useState(null);
+
   return (
     <div style={styles.page}>
       <div style={styles.enTete}>
@@ -449,9 +451,49 @@ export default function Articles() {
               onPhotoMiseAJour={mettreAJourArticle}
               onCodeBarreGenere={mettreAJourArticle}
               onModifier={ouvrirEdition}
+              onVoir={setArticleAffiche}
             />
           ))}
           {articles.length === 0 && <p>Aucun article pour l'instant.</p>}
+        </div>
+      )}
+
+      {articleAffiche && (
+        <div style={styles.superposition} onClick={() => setArticleAffiche(null)}>
+          <div style={styles.panneauConsultation} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <h2 style={styles.titreFormulaire}>{articleAffiche.designation}</h2>
+              <button onClick={() => setArticleAffiche(null)} style={styles.boutonModifier}>✕</button>
+            </div>
+            {articleAffiche.photos?.[0] && (
+              <img src={articleAffiche.photos[0].url} alt="" style={{ width: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 8, marginBottom: 12 }} />
+            )}
+            <table style={styles.tableauConsultation}>
+              <tbody>
+                <tr><td style={styles.libelleConsultation}>Référence</td><td>{articleAffiche.reference}</td></tr>
+                <tr><td style={styles.libelleConsultation}>Code-barre</td><td>{articleAffiche.codeBarre || '—'}</td></tr>
+                <tr><td style={styles.libelleConsultation}>Famille</td><td>{articleAffiche.famille?.nom || '—'}</td></tr>
+                <tr><td style={styles.libelleConsultation}>Sous-famille</td><td>{articleAffiche.sousFamille?.nom || '—'}</td></tr>
+                <tr><td style={styles.libelleConsultation}>Prix de vente</td><td>{Number(articleAffiche.prixVente).toLocaleString('fr-FR')} F</td></tr>
+                <tr><td style={styles.libelleConsultation}>Prix d'achat</td><td>{articleAffiche.prixAchat != null ? `${Number(articleAffiche.prixAchat).toLocaleString('fr-FR')} F` : '—'}</td></tr>
+                <tr><td style={styles.libelleConsultation}>Stock actuel</td><td>{articleAffiche.stockActuel}</td></tr>
+                <tr><td style={styles.libelleConsultation}>Seuil d'alerte</td><td>{articleAffiche.seuilAlerte}</td></tr>
+                <tr><td style={styles.libelleConsultation}>Actif</td><td>{articleAffiche.actif === false ? 'Non' : 'Oui'}</td></tr>
+              </tbody>
+            </table>
+            {articleAffiche.description && (
+              <>
+                <p style={{ ...styles.libelleConsultation, marginTop: 12, marginBottom: 4 }}>Description</p>
+                <p style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{articleAffiche.description}</p>
+              </>
+            )}
+            <button
+              onClick={() => { setArticleAffiche(null); ouvrirEdition(articleAffiche); }}
+              style={{ ...styles.boutonAjouter, marginTop: 14 }}
+            >
+              ✏️ Modifier cet article
+            </button>
+          </div>
         </div>
       )}
 
@@ -877,7 +919,7 @@ export default function Articles() {
   );
 }
 
-function CarteArticle({ article, onPhotoMiseAJour, onCodeBarreGenere, onModifier }) {
+function CarteArticle({ article, onPhotoMiseAJour, onCodeBarreGenere, onModifier, onVoir }) {
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [erreurPhoto, setErreurPhoto] = useState('');
   const [actionPhotoEnCours, setActionPhotoEnCours] = useState(null);
@@ -1007,9 +1049,14 @@ function CarteArticle({ article, onPhotoMiseAJour, onCodeBarreGenere, onModifier
       <div style={styles.corpsCarte}>
         <div style={styles.enTeteCorpsCarte}>
           <div style={styles.designation}>{article.designation}</div>
-          <button onClick={() => onModifier(article)} style={styles.boutonModifier} title="Modifier">
-            ✏️
-          </button>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button onClick={() => onVoir(article)} style={styles.boutonModifier} title="Voir les détails">
+              👁️
+            </button>
+            <button onClick={() => onModifier(article)} style={styles.boutonModifier} title="Modifier">
+              ✏️
+            </button>
+          </div>
         </div>
         <div style={styles.reference}>{article.reference}</div>
         <div style={styles.prix}>{Number(article.prixVente).toLocaleString('fr-FR')} F</div>
@@ -1676,6 +1723,16 @@ const styles = {
   boutonRetour: { padding: '8px 14px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', cursor: 'pointer', color: 'var(--brown-ink)' },
   titre: { fontFamily: 'var(--font-display)', margin: 0, fontSize: 28 },
   boutonAjouter: { padding: '10px 18px', borderRadius: 8, border: 'none', background: 'var(--gold-deep)', color: 'var(--white)', cursor: 'pointer', fontWeight: 600 },
+  superposition: {
+    position: 'fixed', inset: 0, background: 'rgba(46, 26, 13, 0.5)', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20,
+  },
+  panneauConsultation: {
+    background: 'var(--white)', borderRadius: 14, padding: 24, maxWidth: 420, width: '100%',
+    maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 8px 30px rgba(0,0,0,0.25)',
+  },
+  tableauConsultation: { width: '100%', borderCollapse: 'collapse', fontSize: 14 },
+  libelleConsultation: { color: 'var(--brown-soft)', fontWeight: 600, paddingRight: 12, paddingTop: 6, paddingBottom: 6, verticalAlign: 'top' },
   boutonImprimer: { padding: '10px 18px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', color: 'var(--brown-ink)', cursor: 'pointer', fontWeight: 600 },
   grille: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 20 },
   carte: { background: 'var(--white)', borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 8px rgba(74,44,23,0.12)' },
