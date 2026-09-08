@@ -67,7 +67,10 @@ export default function Dashboard() {
 
         {dashboard && (
           <div style={styles.grilleKpi}>
-            <CarteKpi icone="💰" label="Ventes du jour" valeur={`${dashboard.ventes.total.toLocaleString('fr-FR')} F`} sousTexte={`${dashboard.ventes.nombre} vente(s)`} />
+            <CarteKpi
+              icone="💰" label="Ventes du jour" valeur={`${dashboard.ventes.total.toLocaleString('fr-FR')} F`} sousTexte={`${dashboard.ventes.nombre} vente(s)`}
+              onClick={() => navigate('/ventes?onglet=historique&periode=jour')}
+            />
             <CarteKpi
               icone="📦" label="Alertes stock" valeur={dashboard.alertesStock.length}
               sousTexte={dashboard.alertesStock.length > 0 ? 'À réapprovisionner' : 'Rien à signaler'}
@@ -100,8 +103,14 @@ export default function Dashboard() {
                   accent={dashboard.demandesCodeRemiseEnAttente > 0}
                   onClick={() => navigate('/parametres?onglet=remises')}
                 />
-                <CarteKpi icone="📉" label="Remises du jour" valeur={`${dashboard.remises.jour.total.toLocaleString('fr-FR')} F`} sousTexte={`${dashboard.remises.jour.nombre} vente(s) remisée(s)`} />
-                <CarteKpi icone="📊" label="Remises du mois en cours" valeur={`${dashboard.remises.mois.total.toLocaleString('fr-FR')} F`} sousTexte={`${dashboard.remises.mois.nombre} vente(s) remisée(s)`} />
+                <CarteKpi
+                  icone="📉" label="Remises du jour" valeur={`${dashboard.remises.jour.total.toLocaleString('fr-FR')} F`} sousTexte={`${dashboard.remises.jour.nombre} vente(s) remisée(s)`}
+                  onClick={() => navigate('/ventes?onglet=historique&periode=jour&remise=1')}
+                />
+                <CarteKpi
+                  icone="📊" label="Remises du mois en cours" valeur={`${dashboard.remises.mois.total.toLocaleString('fr-FR')} F`} sousTexte={`${dashboard.remises.mois.nombre} vente(s) remisée(s)`}
+                  onClick={() => navigate('/ventes?onglet=historique&periode=mois&remise=1')}
+                />
               </>
             )}
           </div>

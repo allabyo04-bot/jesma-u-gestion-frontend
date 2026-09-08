@@ -258,7 +258,9 @@ export default function Ventes() {
   const [searchParams, setSearchParams] = useSearchParams();
   const utilisateur = getUtilisateur();
   const estAdmin = utilisateur?.role === 'ADMIN';
-  const [ongletActif, setOngletActif] = useState('nouvelle');
+  const [ongletActif, setOngletActif] = useState(searchParams.get('onglet') || 'nouvelle');
+  const [filtrePeriodeHistorique, setFiltrePeriodeHistorique] = useState(searchParams.get('periode') || 'toutes');
+  const [filtreRemiseUniquement, setFiltreRemiseUniquement] = useState(searchParams.get('remise') === '1');
 
   const [panier, setPanier] = useState([]);
   const [filtrePanier, setFiltrePanier] = useState('');
@@ -1124,6 +1126,15 @@ export default function Ventes() {
     }
   }
 
+  const ventesHistoriqueAffichees = historiqueVentes.filter((v) => {
+    const d = new Date(v.createdAt);
+    const maintenant = new Date();
+    if (filtrePeriodeHistorique === 'jour' && d.toDateString() !== maintenant.toDateString()) return false;
+    if (filtrePeriodeHistorique === 'mois' && (d.getFullYear() !== maintenant.getFullYear() || d.getMonth() !== maintenant.getMonth())) return false;
+    if (filtreRemiseUniquement && !(Number(v.remiseMontant) > 0)) return false;
+    return true;
+  });
+
   return (
     <div style={styles.page}>
       <aside style={styles.sidebar}>
@@ -1294,6 +1305,21 @@ export default function Ventes() {
           <>
             <h2 style={styles.titreOnglet}>{estAdmin ? 'Historique des ventes' : "Ventes d'aujourd'hui"}</h2>
 
+            {(filtrePeriodeHistorique !== 'toutes' || filtreRemiseUniquement) && (
+              <div style={{ ...styles.carteAttente, background: 'var(--cream-deep)', maxWidth: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13 }}>
+                  Filtre actif : {filtrePeriodeHistorique === 'jour' ? "aujourd'hui" : filtrePeriodeHistorique === 'mois' ? 'ce mois-ci' : 'toutes dates'}
+                  {filtreRemiseUniquement ? ' — avec remise uniquement' : ''}
+                </span>
+                <button
+                  onClick={() => { setFiltrePeriodeHistorique('toutes'); setFiltreRemiseUniquement(false); setSearchParams({}); }}
+                  style={styles.boutonRetirer}
+                >
+                  Réinitialiser
+                </button>
+              </div>
+            )}
+
             {erreurHistorique && <div style={styles.bandeauErreur}>{erreurHistorique}</div>}
 
             {estAdmin && demandesAnnulation.length > 0 && (
@@ -1332,12 +1358,12 @@ export default function Ventes() {
             )}
 
             {historiqueChargement && <p style={styles.texteMuet}>Chargement…</p>}
-            {!historiqueChargement && historiqueVentes.length === 0 && (
-              <p style={styles.texteMuet}>Aucune vente pour l'instant.</p>
+            {!historiqueChargement && ventesHistoriqueAffichees.length === 0 && (
+              <p style={styles.texteMuet}>Aucune vente pour cette période.</p>
             )}
 
             <div style={styles.listeAttente}>
-              {historiqueVentes.map((v) => (
+              {ventesHistoriqueAffichees.map((v) => (
                 <div key={v.id} style={styles.carteAttente}>
                   <div style={styles.enTeteCarteAttente}>
                     <span style={{ fontWeight: 700 }}>{v.numero} — {Number(v.totalNet).toLocaleString('fr-FR')} F</span>
