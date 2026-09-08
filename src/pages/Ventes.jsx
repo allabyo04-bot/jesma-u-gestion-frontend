@@ -195,6 +195,30 @@ function construireMessageWhatsAppVente() {
   ].join('\n');
 }
 
+// Convertit les paiements tels que saisis (montant reçu du client, pouvant
+// dépasser le total pour permettre de calculer la monnaie à rendre) en montants
+// réellement conservés en caisse, pour l'enregistrement et les rapports (États,
+// Fermeture de caisse). Sans ça, un excédent rendu en monnaie gonflerait à tort
+// le total "encaissé" du mode de paiement concerné (typiquement Espèces).
+function paiementsNetsPourEnregistrement(paiements, totalNet) {
+  const somme = paiements.reduce((s, p) => s + Number(p.montant), 0);
+  let excedent = somme - totalNet;
+  if (excedent <= 0) return paiements;
+
+  const resultat = [];
+  for (let i = paiements.length - 1; i >= 0; i--) {
+    const p = paiements[i];
+    let montant = Number(p.montant);
+    if (excedent > 0) {
+      const retrait = Math.min(excedent, montant);
+      montant -= retrait;
+      excedent -= retrait;
+    }
+    resultat.unshift({ ...p, montant });
+  }
+  return resultat.filter((p) => p.montant > 0);
+}
+
 function imprimerTicketDepuisHtml(html) {  const fenetre = window.open('', '_blank', 'width=380,height=600');
   if (!fenetre) return;
   fenetre.document.write(html);
@@ -1051,7 +1075,7 @@ export default function Ventes() {
           quantite: l.quantite,
           prixUnitaire: l.prixUnitaire,
         })),
-        paiements: paiements.map((p) => ({ mode: p.mode, montant: p.montant })),
+        paiements: paiementsNetsPourEnregistrement(paiements, totalNet).map((p) => ({ mode: p.mode, montant: p.montant })),
       });
     } catch (err) {
       // Échec réel côté serveur (stock refusé, avoir invalide, etc.) — rien n'a été
