@@ -50,6 +50,12 @@ function imprimerFermetureCaisse(fermeture, lieuNom) {
   ${fermeture.parModePaiement.map((m) => `<div class="ligne"><span>${m.mode}</span><span>${m.montant.toLocaleString('fr-FR')} F</span></div>`).join('')}
   <hr>
   <div class="ligne total"><span>Total encaissé</span><span>${fermeture.totalEncaisse.toLocaleString('fr-FR')} F</span></div>
+  ${(fermeture.detailEcart.totalReglementsCredit > 0 || fermeture.detailEcart.totalCartesCadeauxActivees > 0) ? `
+  <div class="section-titre">Détail (dont)</div>
+  <div class="ligne"><span>Ventes du jour</span><span>${fermeture.detailEcart.totalVentesJour.toLocaleString('fr-FR')} F</span></div>
+  ${fermeture.detailEcart.totalReglementsCredit > 0 ? `<div class="ligne"><span>Règlements de crédits anciens</span><span>${fermeture.detailEcart.totalReglementsCredit.toLocaleString('fr-FR')} F</span></div>` : ''}
+  ${fermeture.detailEcart.totalCartesCadeauxActivees > 0 ? `<div class="ligne"><span>Cartes cadeaux activées</span><span>${fermeture.detailEcart.totalCartesCadeauxActivees.toLocaleString('fr-FR')} F</span></div>` : ''}
+  ` : ''}
   <hr>
   <div class="section-titre">Avoirs</div>
   <div class="ligne"><span>Émis (${fermeture.avoirsEmis.nombre})</span><span>${fermeture.avoirsEmis.montant.toLocaleString('fr-FR')} F</span></div>
@@ -558,6 +564,33 @@ export default function Etats() {
                   </div>
                 ))}
               </div>
+
+              {(fermeture.detailEcart.totalReglementsCredit > 0 || fermeture.detailEcart.totalCartesCadeauxActivees > 0) && (
+                <div style={{ ...styles.carte, gridColumn: '1 / -1', background: 'var(--cream)' }}>
+                  <div style={styles.carteLabel}>
+                    Pourquoi ce total ne correspond pas exactement aux "ventes du jour" ?
+                  </div>
+                  <div style={styles.ligneRecap}>
+                    <span>Ventes du jour</span>
+                    <span style={{ fontWeight: 600 }}>{fermeture.detailEcart.totalVentesJour.toLocaleString('fr-FR')} F</span>
+                  </div>
+                  {fermeture.detailEcart.totalReglementsCredit > 0 && (
+                    <div style={styles.ligneRecap}>
+                      <span>+ Règlements reçus aujourd'hui sur d'anciens crédits</span>
+                      <span style={{ fontWeight: 600 }}>{fermeture.detailEcart.totalReglementsCredit.toLocaleString('fr-FR')} F</span>
+                    </div>
+                  )}
+                  {fermeture.detailEcart.totalCartesCadeauxActivees > 0 && (
+                    <div style={styles.ligneRecap}>
+                      <span>+ Cartes cadeaux activées aujourd'hui</span>
+                      <span style={{ fontWeight: 600 }}>{fermeture.detailEcart.totalCartesCadeauxActivees.toLocaleString('fr-FR')} F</span>
+                    </div>
+                  )}
+                  <p style={{ fontSize: 12, color: 'var(--brown-soft)', marginTop: 8, marginBottom: 0 }}>
+                    Ce sont de vrais encaissements en espèces/mobile money aujourd'hui, mais qui ne comptent pas dans la valeur des "ventes du jour" (qui, elle, ne compte que les ventes créées aujourd'hui).
+                  </p>
+                </div>
+              )}
 
               <div style={styles.carte}>
                 <div style={styles.carteLabel}>Avoirs émis</div>
