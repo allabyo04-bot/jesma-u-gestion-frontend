@@ -276,6 +276,19 @@ export default function Ventes() {
   const [motifRemise, setMotifRemise] = useState('');
   const [codeDeblocageRemise, setCodeDeblocageRemise] = useState('');
   const [demandeCodeEnvoyee, setDemandeCodeEnvoyee] = useState(false);
+  const [envoiDemandeCodeEnCours, setEnvoiDemandeCodeEnCours] = useState(false);
+
+  async function envoyerDemandeCode() {
+    setEnvoiDemandeCodeEnCours(true);
+    try {
+      await appelApi('POST', '/remises/demande-code', { montant: remise });
+      setDemandeCodeEnvoyee(true);
+    } catch (err) {
+      setErreurVente(err.message);
+    } finally {
+      setEnvoiDemandeCodeEnCours(false);
+    }
+  }
   const [seuilRemise, setSeuilRemise] = useState(null);
 
   const [lieux, setLieux] = useState([]);
@@ -1030,11 +1043,7 @@ export default function Ventes() {
       return;
     }
     if (remiseDepassantSeuil && !codeDeblocageRemise.trim()) {
-      if (!demandeCodeEnvoyee) {
-        appelApi('POST', '/remises/demande-code', { montant: remise }).catch(() => {});
-        setDemandeCodeEnvoyee(true);
-      }
-      setErreurVente(`Un code de déblocage administrateur est requis pour une remise supérieure à ${seuilRemise.toLocaleString('fr-FR')} F. Victoria a été alertée sur son tableau de bord.`);
+      setErreurVente(`Un code de déblocage administrateur est requis pour une remise supérieure à ${seuilRemise.toLocaleString('fr-FR')} F. Clique sur "Envoyer la demande à l'administrateur" ci-dessus si ce n'est pas déjà fait.`);
       return;
     }
     if (!estCredit && paiements.length === 0 && contributionAvoir === 0 && contributionCarteCadeau === 0) {
@@ -1985,6 +1994,23 @@ export default function Ventes() {
                         onChange={(e) => setCodeDeblocageRemise(e.target.value)}
                         placeholder="Code communiqué par l'administrateur…"
                       />
+                      {!codeDeblocageRemise.trim() && (
+                        <div style={{ marginTop: 6 }}>
+                          <button
+                            type="button"
+                            onClick={envoyerDemandeCode}
+                            disabled={envoiDemandeCodeEnCours || demandeCodeEnvoyee}
+                            style={styles.boutonAjouterPaiement}
+                          >
+                            {envoiDemandeCodeEnCours ? 'Envoi…' : demandeCodeEnvoyee ? '✓ Demande envoyée à l\'administrateur' : "📨 Envoyer la demande à l'administrateur"}
+                          </button>
+                          {demandeCodeEnvoyee && (
+                            <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--brown-soft)' }}>
+                              Attends que Victoria te communique le code, puis saisis-le ci-dessus.
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </label>
                   )}
                 </div>

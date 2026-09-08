@@ -539,8 +539,13 @@ function OngletRemises() {
   const [generationEnCours, setGenerationEnCours] = useState(false);
   const [erreurCode, setErreurCode] = useState('');
   const [historique, setHistorique] = useState([]);
+  const [demandesEnAttente, setDemandesEnAttente] = useState([]);
 
-  useEffect(() => { chargerSeuil(); chargerHistorique(); }, []);
+  useEffect(() => { chargerSeuil(); chargerHistorique(); chargerDemandesEnAttente(); }, []);
+
+  function chargerDemandesEnAttente() {
+    appelApi('GET', '/remises/demandes-code').then(setDemandesEnAttente).catch(() => {});
+  }
 
   function chargerSeuil() {
     setChargement(true);
@@ -578,6 +583,7 @@ function OngletRemises() {
       const r = await appelApi('POST', '/remises/codes-deblocage', {});
       setCodeGenere(r.code);
       chargerHistorique();
+      chargerDemandesEnAttente();
     } catch (err) {
       setErreurCode(err.message);
     } finally {
@@ -622,6 +628,21 @@ function OngletRemises() {
         Génère un code à usage unique, différent à chaque fois, à communiquer oralement (ou par WhatsApp) au caissier.
         Il ne resservira plus une fois utilisé — pas besoin de le retenir ni de le changer après coup.
       </p>
+
+      {demandesEnAttente.length > 0 && (
+        <div style={{ background: '#FBE4E1', borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
+          <p style={{ fontWeight: 700, fontSize: 13, margin: '0 0 6px', color: 'var(--error)' }}>
+            {demandesEnAttente.length} demande(s) de code en attente :
+          </p>
+          {demandesEnAttente.map((d) => (
+            <div key={d.id} style={{ fontSize: 13, marginBottom: 2 }}>
+              <strong>{d.demandeur || 'Un caissier'}</strong> — remise de <strong>{Number(d.montantRemise).toLocaleString('fr-FR')} F</strong>
+              <span style={{ color: 'var(--brown-soft)', marginLeft: 6 }}>({new Date(d.createdAt).toLocaleTimeString('fr-FR')})</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {erreurCode && <div style={styles.bandeauErreur}>{erreurCode}</div>}
       <button onClick={genererCode} disabled={generationEnCours} style={styles.boutonAjouter}>
         {generationEnCours ? 'Génération…' : '+ Générer un nouveau code'}
