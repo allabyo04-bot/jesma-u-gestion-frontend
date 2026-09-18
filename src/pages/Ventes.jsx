@@ -2006,7 +2006,7 @@ export default function Ventes() {
                           </button>
                           {demandeCodeEnvoyee && (
                             <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--brown-soft)' }}>
-                              Attends que Victoria te communique le code, puis saisis-le ci-dessus.
+                              Attends que l'administrateur te communique le code, puis saisis-le ci-dessus.
                             </span>
                           )}
                         </div>
