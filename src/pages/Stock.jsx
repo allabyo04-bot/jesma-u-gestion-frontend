@@ -961,19 +961,39 @@ function OngletHistorique({ articles, lieux }) {
       .finally(() => setChargement(false));
   }
 
-  async function imprimerEtiquettesMouvementsAffiches() {
-    // Regroupe les quantités par article (un même article peut apparaître
-    // plusieurs fois sur la période) et ignore les quantités négatives
-    // (sorties, annulations...) qui ne représentent pas une réception réelle.
+  // Liste éditable construite à partir des mouvements filtrés (regroupés par
+  // article, quantités négatives ignorées) — la caissière peut décocher des
+  // articles ou changer librement la quantité à imprimer (ex. rattraper un
+  // déficit d'étiquettes) sans que ça touche au stock réel.
+  const [lignesEtiquettesEditables, setLignesEtiquettesEditables] = useState([]);
+
+  useEffect(() => {
     const totauxParArticle = {};
     for (const m of mouvements) {
       if (m.quantite > 0) {
-        totauxParArticle[m.articleId] = (totauxParArticle[m.articleId] || 0) + m.quantite;
+        if (!totauxParArticle[m.articleId]) {
+          totauxParArticle[m.articleId] = { articleId: m.articleId, designation: m.article?.designation || '—', quantite: 0 };
+        }
+        totauxParArticle[m.articleId].quantite += m.quantite;
       }
     }
-    const lignes = Object.entries(totauxParArticle).map(([articleId, quantite]) => ({ articleId: Number(articleId), quantite }));
+    setLignesEtiquettesEditables(Object.values(totauxParArticle).map((l) => ({ ...l, coche: true })));
+  }, [mouvements]);
+
+  function modifierQuantiteEtiquette(articleId, quantite) {
+    setLignesEtiquettesEditables((prec) => prec.map((l) => (l.articleId === articleId ? { ...l, quantite: Number(quantite) } : l)));
+  }
+
+  function basculerCocheEtiquette(articleId) {
+    setLignesEtiquettesEditables((prec) => prec.map((l) => (l.articleId === articleId ? { ...l, coche: !l.coche } : l)));
+  }
+
+  async function imprimerEtiquettesMouvementsAffiches() {
+    const lignes = lignesEtiquettesEditables
+      .filter((l) => l.coche && l.quantite > 0)
+      .map((l) => ({ articleId: l.articleId, quantite: l.quantite }));
     if (lignes.length === 0) {
-      setErreurEtiquettesHistorique("Aucune quantité positive à imprimer dans les mouvements affichés (essaie de filtrer sur le type 'Réception').");
+      setErreurEtiquettesHistorique("Aucun article coché avec une quantité valide à imprimer.");
       return;
     }
     setErreurEtiquettesHistorique('');
@@ -1040,8 +1060,27 @@ function OngletHistorique({ articles, lieux }) {
         </p>
       )}
 
-      {mouvements.length > 0 && (
-        <div style={{ marginBottom: 12 }}>
+      {lignesEtiquettesEditables.length > 0 && (
+        <div style={{ background: 'var(--cream)', border: '1px solid var(--cream-deep)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+          <p style={{ fontWeight: 700, fontSize: 13, margin: '0 0 8px' }}>
+            Étiquettes à imprimer — décoche ou modifie une quantité si besoin
+          </p>
+          <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 10 }}>
+            {lignesEtiquettesEditables.map((l) => (
+              <div key={l.articleId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderBottom: '1px solid var(--cream-deep)' }}>
+                <input type="checkbox" checked={l.coche} onChange={() => basculerCocheEtiquette(l.articleId)} />
+                <span style={{ flex: 1, fontSize: 13, opacity: l.coche ? 1 : 0.5 }}>{l.designation}</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={l.quantite}
+                  onChange={(e) => modifierQuantiteEtiquette(l.articleId, e.target.value)}
+                  disabled={!l.coche}
+                  style={{ ...styles.champInput, width: 80, padding: '4px 8px' }}
+                />
+              </div>
+            ))}
+          </div>
           {erreurEtiquettesHistorique && <p style={{ color: 'var(--error)', fontSize: 13 }}>{erreurEtiquettesHistorique}</p>}
           <button
             type="button"
@@ -1049,7 +1088,7 @@ function OngletHistorique({ articles, lieux }) {
             disabled={impressionEtiquettesHistoriqueEnCours}
             style={styles.boutonValider}
           >
-            {impressionEtiquettesHistoriqueEnCours ? 'Préparation…' : '🖨️ Imprimer les étiquettes de ces mouvements'}
+            {impressionEtiquettesHistoriqueEnCours ? 'Préparation…' : '🖨️ Imprimer les étiquettes cochées'}
           </button>
         </div>
       )}
