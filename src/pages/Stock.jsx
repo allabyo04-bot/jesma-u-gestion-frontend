@@ -134,6 +134,8 @@ function OngletReception({ lieux, articles, familles, onFamillesMisesAJour, onAr
     try {
       const html = await envoyerEtRecupererHtmlAvecAuth('/articles/a-imprimer/etiquettes', {
         lignes: derniereReception.map((l) => ({ articleId: l.articleId, quantite: l.quantite })),
+        decalageX: localStorage.getItem('jesma_etiquette_decalage_x') || 0,
+        decalageY: localStorage.getItem('jesma_etiquette_decalage_y') || 0,
       });
       const fenetre = window.open('', '_blank');
       fenetre.document.write(html);
