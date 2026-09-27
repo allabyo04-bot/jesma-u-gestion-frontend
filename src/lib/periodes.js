@@ -16,11 +16,22 @@ export function formatDatePeriode(d) {
 export const RACCOURCIS_PERIODE = [
   { id: 'hier', label: 'Hier' },
   { id: 'aujourdhui', label: "Aujourd'hui" },
+  { id: 'semaine', label: 'Semaine en cours' },
+  { id: 'semaine_precedente', label: 'Semaine précédente' },
   { id: 'mois', label: 'Mois en cours' },
   { id: 'trimestre', label: 'Trimestre' },
   { id: 'mois_precedent', label: 'Mois précédent' },
   { id: 'annee', label: 'Année en cours' },
 ];
+
+// Lundi de la semaine contenant la date donnée (semaine "à la française").
+function debutSemaine(d) {
+  const r = new Date(d);
+  const jour = r.getDay(); // 0 = dimanche
+  const decalage = jour === 0 ? 6 : jour - 1;
+  r.setDate(r.getDate() - decalage);
+  return r;
+}
 
 // Renvoie { debut, fin } (chaînes AAAA-MM-JJ) pour l'identifiant de raccourci
 // donné, ou null si l'identifiant est inconnu (ex: 'personnalise').
@@ -34,6 +45,17 @@ export function calculerRaccourci(id) {
   }
   if (id === 'aujourdhui') {
     return { debut: formatDatePeriode(auj), fin: formatDatePeriode(auj) };
+  }
+  if (id === 'semaine') {
+    return { debut: formatDatePeriode(debutSemaine(auj)), fin: formatDatePeriode(auj) };
+  }
+  if (id === 'semaine_precedente') {
+    const lundiCetteSemaine = debutSemaine(auj);
+    const lundiPrecedent = new Date(lundiCetteSemaine);
+    lundiPrecedent.setDate(lundiPrecedent.getDate() - 7);
+    const dimanchePrecedent = new Date(lundiCetteSemaine);
+    dimanchePrecedent.setDate(dimanchePrecedent.getDate() - 1);
+    return { debut: formatDatePeriode(lundiPrecedent), fin: formatDatePeriode(dimanchePrecedent) };
   }
   if (id === 'mois') {
     const debut = new Date(auj.getFullYear(), auj.getMonth(), 1);
