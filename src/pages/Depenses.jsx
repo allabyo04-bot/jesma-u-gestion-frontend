@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { appelApi, getUtilisateur } from '../lib/api';
+import RaccourcisPeriode from '../lib/RaccourcisPeriode';
 
 function formatDate(d) {
   return d.toISOString().slice(0, 10);
@@ -20,6 +21,7 @@ export default function Depenses() {
   const [categorieFiltre, setCategorieFiltre] = useState('');
   const [dateDebut, setDateDebut] = useState(formatDate(new Date()));
   const [dateFin, setDateFin] = useState(formatDate(new Date()));
+  const [raccourciActif, setRaccourciActif] = useState('aujourdhui');
 
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
 
@@ -89,6 +91,13 @@ export default function Depenses() {
 
       {estAdmin ? (
         <div style={styles.blocFiltres}>
+          <RaccourcisPeriode
+            raccourciActif={raccourciActif}
+            onChangerPeriode={(id, periode) => {
+              setRaccourciActif(id);
+              if (periode) { setDateDebut(periode.debut); setDateFin(periode.fin); }
+            }}
+          />
           <label style={styles.champLabel}>
             Catégorie
             <select style={styles.champInput} value={categorieFiltre} onChange={(e) => setCategorieFiltre(e.target.value)}>
@@ -100,11 +109,11 @@ export default function Depenses() {
           </label>
           <label style={styles.champLabel}>
             Du
-            <input type="date" style={styles.champInput} value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} />
+            <input type="date" style={styles.champInput} value={dateDebut} onChange={(e) => { setDateDebut(e.target.value); setRaccourciActif('personnalise'); }} />
           </label>
           <label style={styles.champLabel}>
             Au
-            <input type="date" style={styles.champInput} value={dateFin} onChange={(e) => setDateFin(e.target.value)} />
+            <input type="date" style={styles.champInput} value={dateFin} onChange={(e) => { setDateFin(e.target.value); setRaccourciActif('personnalise'); }} />
           </label>
         </div>
       ) : (

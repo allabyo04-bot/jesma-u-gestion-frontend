@@ -1,23 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { appelApi, getUtilisateur, telechargerFichierAvecAuth } from '../lib/api';
+import RaccourcisPeriode from '../lib/RaccourcisPeriode';
 
 function formatDate(d) {
   return d.toISOString().slice(0, 10);
-}
-
-function debutSemaine() {
-  const d = new Date();
-  const jour = d.getDay(); // 0 = dimanche
-  const decalage = jour === 0 ? 6 : jour - 1; // recule jusqu'au lundi
-  d.setDate(d.getDate() - decalage);
-  return d;
-}
-
-function debutMois() {
-  const d = new Date();
-  d.setDate(1);
-  return d;
 }
 
 function imprimerFermetureCaisse(fermeture, lieuNom) {
@@ -138,21 +125,6 @@ export default function Etats() {
   useEffect(() => {
     appelApi('GET', '/stock/lieux').then(setLieux).catch(() => {});
   }, []);
-
-  function appliquerRaccourci(id) {
-    setRaccourciActif(id);
-    const aujourdhui = new Date();
-    if (id === 'aujourdhui') {
-      setDateDebut(formatDate(aujourdhui));
-      setDateFin(formatDate(aujourdhui));
-    } else if (id === 'semaine') {
-      setDateDebut(formatDate(debutSemaine()));
-      setDateFin(formatDate(aujourdhui));
-    } else if (id === 'mois') {
-      setDateDebut(formatDate(debutMois()));
-      setDateFin(formatDate(aujourdhui));
-    }
-  }
 
   async function chargerOnglet() {
     if (ongletActif === 'fermeture' || ongletActif === 'fidelite' || ongletActif === 'journal' || ongletActif === 'peremption' || ongletActif === 'remises') return;
@@ -460,22 +432,13 @@ export default function Etats() {
           {ongletActif !== 'fermeture' ? (
             estAdmin ? (
               <>
-                <div style={styles.raccourcis}>
-                  {[
-                    { id: 'aujourdhui', label: "Aujourd'hui" },
-                    { id: 'semaine', label: 'Cette semaine' },
-                    { id: 'mois', label: 'Ce mois' },
-                    { id: 'personnalise', label: 'Personnalisé' },
-                  ].map((r) => (
-                    <button
-                      key={r.id}
-                      onClick={() => appliquerRaccourci(r.id)}
-                      style={r.id === raccourciActif ? styles.filtreActif : styles.filtreInactif}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
+                <RaccourcisPeriode
+                  raccourciActif={raccourciActif}
+                  onChangerPeriode={(id, periode) => {
+                    setRaccourciActif(id);
+                    if (periode) { setDateDebut(periode.debut); setDateFin(periode.fin); }
+                  }}
+                />
                 <label style={styles.champLabel}>
                   Du
                   <input

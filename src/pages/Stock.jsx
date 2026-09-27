@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { appelApi, uploaderFichierImport, telechargerFichierAvecAuth, uploaderFichierApercuInventaire, envoyerEtRecupererHtmlAvecAuth } from '../lib/api';
+import RaccourcisPeriode from '../lib/RaccourcisPeriode';
 
 const SOUS_ONGLETS = [
   { id: 'reception', label: 'Réception' },
@@ -938,6 +939,7 @@ function OngletHistorique({ articles, lieux }) {
   const [typeFiltre, setTypeFiltre] = useState('');
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
+  const [raccourciActif, setRaccourciActif] = useState(null);
   const [mouvements, setMouvements] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [impressionEtiquettesHistoriqueEnCours, setImpressionEtiquettesHistoriqueEnCours] = useState(false);
@@ -1046,13 +1048,21 @@ function OngletHistorique({ articles, lieux }) {
         </label>
         <label style={styles.champLabel}>
           Du
-          <input type="date" style={styles.champInput} value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} />
+          <input type="date" style={styles.champInput} value={dateDebut} onChange={(e) => { setDateDebut(e.target.value); setRaccourciActif('personnalise'); }} />
         </label>
         <label style={styles.champLabel}>
           Au
-          <input type="date" style={styles.champInput} value={dateFin} onChange={(e) => setDateFin(e.target.value)} />
+          <input type="date" style={styles.champInput} value={dateFin} onChange={(e) => { setDateFin(e.target.value); setRaccourciActif('personnalise'); }} />
         </label>
       </div>
+
+      <RaccourcisPeriode
+        raccourciActif={raccourciActif}
+        onChangerPeriode={(id, periode) => {
+          setRaccourciActif(id);
+          if (periode) { setDateDebut(periode.debut); setDateFin(periode.fin); }
+        }}
+      />
 
       {(dateDebut || dateFin || typeFiltre) && (
         <p style={{ fontSize: 12, color: 'var(--brown-soft)', margin: '4px 0 10px' }}>
