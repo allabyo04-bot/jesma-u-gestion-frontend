@@ -4,7 +4,10 @@ import { appelApi, getUtilisateur } from '../lib/api';
 import RaccourcisPeriode from '../lib/RaccourcisPeriode';
 
 function formatDate(d) {
-  return d.toISOString().slice(0, 10);
+  const annee = d.getFullYear();
+  const mois = String(d.getMonth() + 1).padStart(2, '0');
+  const jour = String(d.getDate()).padStart(2, '0');
+  return `${annee}-${mois}-${jour}`;
 }
 
 export default function Depenses() {

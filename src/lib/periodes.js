@@ -2,8 +2,15 @@
 // date (Dépenses, États, Historique des mouvements...). Toujours utilisés en
 // complément d'une sélection manuelle libre (Du / Au), jamais à sa place.
 
+// Formate en AAAA-MM-JJ à partir des composants LOCAUX de la date, jamais via
+// toISOString() (qui convertit en UTC et peut faire reculer d'un jour dans
+// les fuseaux horaires en avance sur UTC, ex. UTC+1 comme la Côte d'Ivoire
+// voisine ou le Bénin — minuit local devient 23h la veille en UTC).
 export function formatDatePeriode(d) {
-  return d.toISOString().slice(0, 10);
+  const annee = d.getFullYear();
+  const mois = String(d.getMonth() + 1).padStart(2, '0');
+  const jour = String(d.getDate()).padStart(2, '0');
+  return `${annee}-${mois}-${jour}`;
 }
 
 export const RACCOURCIS_PERIODE = [
