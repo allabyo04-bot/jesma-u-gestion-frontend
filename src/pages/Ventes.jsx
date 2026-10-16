@@ -23,8 +23,11 @@ const MODES_PAIEMENT = [
 // que le ticket et l'écran client reflètent immédiatement la progression réelle,
 // sans attendre le prochain achat pour que le compteur serveur se mette à jour.
 const SEUIL_FIDELITE_MONTANT = 20000;
+// Comptes génériques sans fidélité (doit rester aligné avec src/lib/fidelite.js côté backend).
+const NOMS_SANS_FIDELITE = ['livraison'];
 function calculerAchatsRestantsFidelite(clientActuel, totalNetVente) {
   if (!clientActuel || clientActuel.estComptoir) return null;
+  if (NOMS_SANS_FIDELITE.includes(String(clientActuel.nomComplet || '').trim().toLowerCase())) return null;
   const compteurProjete = (clientActuel.achatsConsecutifs || 0) + (totalNetVente >= SEUIL_FIDELITE_MONTANT ? 1 : 0);
   return Math.max(0, 10 - compteurProjete);
 }
