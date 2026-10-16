@@ -62,7 +62,7 @@ export default function Clients() {
             <div style={styles.texteMuet}>{c.telephone || 'Téléphone non renseigné'}</div>
             {c.achatsConsecutifs > 0 && (
               <div style={styles.badgeFidelite}>
-                {c.achatsConsecutifs}/{SEUIL_FIDELITE_ACHATS} achats consécutifs
+                {c.achatsConsecutifs}/{SEUIL_FIDELITE_ACHATS} achats de 20 000 F ou plus
               </div>
             )}
           </div>
@@ -154,7 +154,7 @@ function FicheClient({ clientId, onFermer, onModifie }) {
             <div style={styles.carteFidelite}>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Fidélité</div>
               <div style={styles.texteMuet}>
-                {client.achatsConsecutifs} / {SEUIL_FIDELITE_ACHATS} achats consécutifs ≥ {SEUIL_FIDELITE_MONTANT.toLocaleString('fr-FR')} F
+                {client.achatsConsecutifs} / {SEUIL_FIDELITE_ACHATS} achats de {SEUIL_FIDELITE_MONTANT.toLocaleString('fr-FR')} F ou plus
               </div>
               {client.recompensesFidelite.length > 0 && (
                 <div style={{ marginTop: 8 }}>

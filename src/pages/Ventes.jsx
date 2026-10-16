@@ -19,7 +19,7 @@ const MODES_PAIEMENT = [
 
 // Seuil et palier fidélité (doivent rester alignés avec SEUIL_FIDELITE_MONTANT/ACHATS
 // cote backend, dans venteController.js) : 10 achats consécutifs ≥ 20 000 F donnent
-// droit à un cadeau. On compte la vente en cours dès qu'elle atteint le seuil, pour
+// droit à un cadeau (un achat sous le seuil ne change rien au compteur). On compte la vente en cours dès qu'elle atteint le seuil, pour
 // que le ticket et l'écran client reflètent immédiatement la progression réelle,
 // sans attendre le prochain achat pour que le compteur serveur se mette à jour.
 const SEUIL_FIDELITE_MONTANT = 20000;
@@ -1132,6 +1132,9 @@ export default function Ventes() {
     } finally {
       reinitialiserVente();
       setVenteEnCours(false);
+      // Recharge les clients : leur compteur de fidélité vient de changer côté serveur,
+      // et le message « il vous reste X achats » du prochain reçu en dépend.
+      appelApi('GET', '/clients').then(setClients).catch(() => {});
     }
   }
 
