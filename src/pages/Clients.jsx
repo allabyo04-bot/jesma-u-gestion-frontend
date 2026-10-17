@@ -65,6 +65,11 @@ export default function Clients() {
                 {c.achatsConsecutifs}/{SEUIL_FIDELITE_ACHATS} achats de 20 000 F ou plus
               </div>
             )}
+            {c.avoirActifTotal > 0 && (
+              <div style={styles.badgeAvoir}>
+                Avoir disponible : {Number(c.avoirActifTotal).toLocaleString('fr-FR')} F
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -164,6 +169,37 @@ function FicheClient({ clientId, onFermer, onModifie }) {
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+
+            <div style={styles.carteFidelite}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Avoirs</div>
+              {client.avoirs.length === 0 && <div style={styles.texteMuet}>Aucun avoir pour cette cliente.</div>}
+              {client.avoirs.length > 0 && (
+                <>
+                  <div style={{ ...styles.texteMuet, marginBottom: 8 }}>
+                    Disponible :{' '}
+                    <strong>
+                      {client.avoirs
+                        .filter((a) => a.statut === 'ACTIF')
+                        .reduce((somme, a) => somme + Number(a.montant), 0)
+                        .toLocaleString('fr-FR')} F
+                    </strong>
+                  </div>
+                  {client.avoirs.map((a) => (
+                    <div key={a.id} style={styles.ligneAvoir}>
+                      <span>
+                        <strong>{a.reference}</strong> — {Number(a.montant).toLocaleString('fr-FR')} F
+                        <span style={styles.texteMuet}> (achat {a.venteOrigine.numero}, {new Date(a.createdAt).toLocaleDateString('fr-FR')})</span>
+                      </span>
+                      <span style={a.statut === 'ACTIF' ? styles.statutAvoirActif : styles.texteMuet}>
+                        {a.statut === 'ACTIF'
+                          ? 'À utiliser'
+                          : `Utilisé${a.dateUtilisation ? ` le ${new Date(a.dateUtilisation).toLocaleDateString('fr-FR')}` : ''}${a.venteUtilisation?.[0] ? ` (${a.venteUtilisation[0].numero})` : ''}`}
+                      </span>
+                    </div>
+                  ))}
+                </>
               )}
             </div>
 
@@ -299,6 +335,9 @@ const styles = {
   carteClient: { background: 'var(--white)', borderRadius: 12, padding: 16, cursor: 'pointer', boxShadow: '0 2px 8px rgba(74,44,23,0.08)' },
   nomClient: { fontWeight: 700, fontSize: 15, marginBottom: 4 },
   badgeFidelite: { marginTop: 8, fontSize: 11, fontWeight: 600, color: 'var(--gold-deep)' },
+  badgeAvoir: { marginTop: 6, fontSize: 11, fontWeight: 700, color: '#1E6B36', background: '#E3F3E8', padding: '3px 8px', borderRadius: 20, display: 'inline-block' },
+  ligneAvoir: { display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--cream-deep)' },
+  statutAvoirActif: { fontSize: 12, fontWeight: 700, color: '#1E6B36', whiteSpace: 'nowrap' },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(46,26,13,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100 },
   panneau: { background: 'var(--white)', borderRadius: 16, padding: 28, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 },
   enTetePanneau: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
