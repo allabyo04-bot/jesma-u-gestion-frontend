@@ -9,6 +9,7 @@ export default function ProForma() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState('');
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
+  const [factureEnEdition, setFactureEnEdition] = useState(null);
 
   function chargerFactures() {
     setChargement(true);
@@ -98,6 +99,9 @@ export default function ProForma() {
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <button onClick={() => imprimer(f.numero)} style={styles.boutonSecondaire}>Imprimer</button>
               {f.statut === 'EN_ATTENTE' && (
+                <button onClick={() => setFactureEnEdition(f)} style={styles.boutonSecondaire}>Modifier</button>
+              )}
+              {f.statut === 'EN_ATTENTE' && (
                 <button onClick={() => annuler(f.id)} style={styles.boutonAnnulerLigne}>Annuler</button>
               )}
             </div>
@@ -105,11 +109,13 @@ export default function ProForma() {
         ))}
       </div>
 
-      {formulaireOuvert && (
+      {(formulaireOuvert || factureEnEdition) && (
         <FormulaireProForma
-          onFermer={() => setFormulaireOuvert(false)}
+          factureEnEdition={factureEnEdition}
+          onFermer={() => { setFormulaireOuvert(false); setFactureEnEdition(null); }}
           onCree={() => {
             setFormulaireOuvert(false);
+            setFactureEnEdition(null);
             setFiltre('EN_ATTENTE');
             chargerFactures();
           }}
@@ -119,9 +125,9 @@ export default function ProForma() {
   );
 }
 
-function FormulaireProForma({ onFermer, onCree }) {
+function FormulaireProForma({ onFermer, onCree, factureEnEdition }) {
   const [clients, setClients] = useState([]);
-  const [clientId, setClientId] = useState('');
+  const [clientId, setClientId] = useState(factureEnEdition ? String(factureEnEdition.clientId) : '');
   const [clientSearch, setClientSearch] = useState('');
   const [creationClientOuverte, setCreationClientOuverte] = useState(false);
   const [nomNouveauClient, setNomNouveauClient] = useState('');
@@ -130,7 +136,16 @@ function FormulaireProForma({ onFermer, onCree }) {
   const [creationClientEnCours, setCreationClientEnCours] = useState(false);
   const [articles, setArticles] = useState([]);
   const [recherche, setRecherche] = useState('');
-  const [lignes, setLignes] = useState([]);
+  // En modification, on repart des lignes déjà enregistrées (articles, quantités, prix).
+  const [lignes, setLignes] = useState(() => (factureEnEdition
+    ? factureEnEdition.lignes.map((l) => ({
+      articleId: l.articleId,
+      designation: l.article.designation,
+      prixUnitaire: Number(l.prixUnitaire),
+      quantite: l.quantite,
+      stockActuel: l.article.stockActuel,
+    }))
+    : []));
   const [erreur, setErreur] = useState('');
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
 
@@ -190,8 +205,39 @@ function FormulaireProForma({ onFermer, onCree }) {
   const total = lignes.reduce((s, l) => s + l.prixUnitaire * l.quantite, 0);
 
   const resultatsRecherche = recherche.trim()
-    ? articles.filter((a) => a.designation.toLowerCase().includes(recherche.toLowerCase()) || a.reference.toLowerCase().includes(recherche.toLowerCase())).slice(0, 8)
+    ? articles.filter((a) => {
+      const q = recherche.toLowerCase().trim();
+      return a.designation.toLowerCase().includes(q)
+        || a.reference.toLowerCase().includes(q)
+        || (a.codeBarre || '').toLowerCase().includes(q)
+        || (a.codeInterne || '').toLowerCase().includes(q);
+    }).slice(0, 8)
     : [];
+
+  // Un lecteur de codes-barres tape le code puis appuie sur Entrée. On cherche alors
+  // l'article exact (code-barres, code interne, référence) et on l'ajoute directement.
+  // Sans ça, Entrée validait tout le formulaire au lieu d'ajouter l'article.
+  async function gererToucheRecherche(e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const q = recherche.trim();
+    if (!q) return;
+    setErreur('');
+    try {
+      const reponse = await appelApi('GET', `/articles/recherche?q=${encodeURIComponent(q)}`);
+      const trouve = reponse.mode === 'exact' ? reponse.resultats[0] : null;
+      if (trouve) {
+        // On reprend la fiche de la liste chargée (elle contient le stock actuel).
+        ajouterArticle(articles.find((a) => a.id === trouve.id) || trouve);
+      } else if (resultatsRecherche.length === 1) {
+        ajouterArticle(resultatsRecherche[0]);
+      } else {
+        setErreur(`Aucun article exact pour « ${q} ». Choisissez dans la liste ou précisez la recherche.`);
+      }
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
 
   async function gererSoumission(e) {
     e.preventDefault();
@@ -206,10 +252,15 @@ function FormulaireProForma({ onFermer, onCree }) {
     }
     setEnvoiEnCours(true);
     try {
-      await appelApi('POST', '/proforma', {
+      const corps = {
         clientId,
         lignes: lignes.map((l) => ({ articleId: l.articleId, quantite: l.quantite, prixUnitaire: l.prixUnitaire })),
-      });
+      };
+      if (factureEnEdition) {
+        await appelApi('PUT', `/proforma/${factureEnEdition.id}`, corps);
+      } else {
+        await appelApi('POST', '/proforma', corps);
+      }
       onCree();
     } catch (err) {
       setErreur(err.message);
@@ -222,7 +273,7 @@ function FormulaireProForma({ onFermer, onCree }) {
     <div style={styles.overlay} onClick={onFermer}>
       <form style={styles.panneau} onClick={(e) => e.stopPropagation()} onSubmit={gererSoumission}>
         <div style={styles.enTetePanneau}>
-          <h2 style={styles.titrePanneau}>Nouvelle facture pro forma</h2>
+          <h2 style={styles.titrePanneau}>{factureEnEdition ? `Modifier la pro forma ${factureEnEdition.numero}` : 'Nouvelle facture pro forma'}</h2>
           <button type="button" onClick={onFermer} style={styles.boutonFermer}>✕</button>
         </div>
 
@@ -232,7 +283,7 @@ function FormulaireProForma({ onFermer, onCree }) {
           Client *
           {clientId ? (
             <div style={styles.lignePaiement}>
-              <span>{clients.find((c) => String(c.id) === String(clientId))?.nomComplet || '—'}</span>
+              <span>{clients.find((c) => String(c.id) === String(clientId))?.nomComplet || factureEnEdition?.client?.nomComplet || '—'}</span>
               <button type="button" onClick={() => setClientId('')} style={styles.boutonFermer}>✕</button>
             </div>
           ) : (
@@ -303,9 +354,10 @@ function FormulaireProForma({ onFermer, onCree }) {
           Ajouter un article
           <input
             style={styles.champInput}
-            placeholder="Rechercher par désignation ou référence…"
+            placeholder="Scanner un code-barres ou rechercher par désignation / référence…"
             value={recherche}
             onChange={(e) => setRecherche(e.target.value)}
+            onKeyDown={gererToucheRecherche}
           />
           {resultatsRecherche.length > 0 && (
             <div style={styles.listeResultats}>
@@ -347,7 +399,7 @@ function FormulaireProForma({ onFermer, onCree }) {
         <div style={styles.boutonsFormulaire}>
           <button type="button" onClick={onFermer} style={styles.boutonAnnuler}>Annuler</button>
           <button type="submit" disabled={envoiEnCours} style={styles.boutonValider}>
-            {envoiEnCours ? 'Création…' : 'Créer la facture'}
+            {envoiEnCours ? 'Enregistrement…' : (factureEnEdition ? 'Enregistrer les modifications' : 'Créer la facture')}
           </button>
         </div>
       </form>
