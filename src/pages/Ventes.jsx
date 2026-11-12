@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { appelApi, getUtilisateur } from '../lib/api';
 import { diffuserEtatPanier, diffuserVenteValidee, ecouterCanal } from '../lib/broadcast';
+import { normaliserTelephone } from '../lib/telephone';
+import { numeroWhatsApp, construireMessageWhatsAppVente } from '../lib/whatsapp';
 
 const ONGLETS = [
   { id: 'nouvelle', label: 'Nouvelle vente' },
@@ -170,34 +172,6 @@ function construireRecuReglementHtml({ vente, reglement, totalPayeApres, montant
 </html>`;
 }
 
-// Convertit un numéro ivoirien local (ex: 0708735901) au format international
-// pour wa.me. En Côte d'Ivoire, le zéro de tête fait partie du numéro et doit
-// être CONSERVÉ (225 0708735901, jamais 225708735901 qui est invalide).
-// Tolérant sur la saisie : espaces/tirets ignorés, "+225" ou "225" déjà présent
-// accepté (retiré puis reconstruit), pour ne pas dépendre d'un format unique
-// de saisie du numéro client.
-function numeroWhatsApp(telephone) {
-  if (!telephone) return null;
-  let chiffres = telephone.replace(/\D/g, '');
-  if (chiffres.length === 13 && chiffres.startsWith('225')) {
-    chiffres = chiffres.slice(3);
-  } else if (chiffres.length === 12 && chiffres.startsWith('225')) {
-    chiffres = chiffres.slice(2); // cas rare : 225 suivi d'un numero a 9 chiffres (0 deja retire)
-  }
-  if (chiffres.length !== 10) return null;
-  return `225${chiffres}`;
-}
-
-function construireMessageWhatsAppVente() {
-  return [
-    "Merci d'être passé(e) chez JESMA U !",
-    'C\'était un plaisir de vous accueillir.',
-    'Au plaisir de vous revoir très bientôt en boutique !',
-    '',
-    "_JESMA U — L'art d'accueillir la vie et de l'entretenir._",
-  ].join('\n');
-}
-
 // Convertit les paiements tels que saisis (montant reçu du client, pouvant
 // dépasser le total pour permettre de calculer la monnaie à rendre) en montants
 // réellement conservés en caisse, pour l'enregistrement et les rapports (États,
@@ -304,6 +278,12 @@ export default function Ventes() {
   const [clients, setClients] = useState([]);
   const [clientId, setClientId] = useState('');
   const [clientSearch, setClientSearch] = useState('');
+  // Règle « coordonnées obligatoires » (allumée par un administrateur) et dérogation choisie.
+  const [regleCoordonnees, setRegleCoordonnees] = useState({ obligatoire: false, motifs: [] });
+  const [sansCoordonnees, setSansCoordonnees] = useState(null); // { motif, detail } ou null
+  const [selecteurMotifOuvert, setSelecteurMotifOuvert] = useState(false);
+  const [motifChoisi, setMotifChoisi] = useState('');
+  const [detailMotif, setDetailMotif] = useState('');
 
   const [paiements, setPaiements] = useState([]);
   const [modeAAjouter, setModeAAjouter] = useState(MODES_PAIEMENT[0]);
@@ -636,6 +616,10 @@ export default function Ventes() {
       setErreurNouveauClient('Le téléphone est requis.');
       return;
     }
+    if (regleCoordonnees.obligatoire && !normaliserTelephone(telephoneNouveauClient)) {
+      setErreurNouveauClient('Numéro de téléphone invalide : 10 chiffres (ex. 07 07 07 07 07). Les formats +225 et 00225 sont acceptés.');
+      return;
+    }
     setCreationClientEnCours(true);
     try {
       const client = await appelApi('POST', '/clients', {
@@ -915,6 +899,10 @@ export default function Ventes() {
   }
 
   function reinitialiserVente() {
+    setSansCoordonnees(null);
+    setSelecteurMotifOuvert(false);
+    setMotifChoisi('');
+    setDetailMotif('');
     setPanier([]);
     setFiltrePanier('');
     setAvertissementStock('');
@@ -1030,6 +1018,27 @@ export default function Ventes() {
     }
   }
 
+  // ---- Coordonnées du client ----
+  const clientDeLaVente = clients.find((c) => String(c.id) === String(clientId));
+  const clientIdentifie = !!clientDeLaVente && !clientDeLaVente.estComptoir
+    && String(clientDeLaVente.nomComplet || '').trim().toLowerCase() !== 'livraison'
+    && normaliserTelephone(clientDeLaVente.telephone) !== null;
+  const coordonneesManquantes = regleCoordonnees.obligatoire && !clientIdentifie;
+
+  useEffect(() => {
+    appelApi('GET', '/clients/regle-coordonnees').then(setRegleCoordonnees).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // Dès qu'un client identifié est choisi, la dérogation n'a plus lieu d'être.
+    if (clientIdentifie) { setSansCoordonnees(null); setSelecteurMotifOuvert(false); }
+  }, [clientIdentifie]);
+
+  function confirmerSansCoordonnees() {
+    setSansCoordonnees({ motif: motifChoisi, detail: detailMotif.trim() || undefined });
+    setSelecteurMotifOuvert(false);
+  }
+
   async function validerVente() {
     setErreurVente('');
 
@@ -1043,6 +1052,10 @@ export default function Ventes() {
     }
     if (!vendeurId) {
       setErreurVente('Sélectionnez un vendeur.');
+      return;
+    }
+    if (coordonneesManquantes && !sansCoordonnees) {
+      setErreurVente('Coordonnées du client requises : choisissez ou créez le client (nom et téléphone), ou cliquez sur « Vendre sans coordonnées ».');
       return;
     }
     if (remiseDepassantSeuil && !codeDeblocageRemise.trim()) {
@@ -1078,6 +1091,7 @@ export default function Ventes() {
         vendeurId: vendeurId ? Number(vendeurId) : null,
         clientId: idClientFinal,
         typeVente: estCredit ? 'CREDIT' : 'COMPTANT',
+        sansCoordonnees: coordonneesManquantes && sansCoordonnees ? sansCoordonnees : undefined,
         remiseMontant: remise > 0 ? remise : undefined,
         motifRemise: motifRemise || undefined,
         codeDeblocageRemise: remiseDepassantSeuil ? codeDeblocageRemise.trim() : undefined,
@@ -1345,7 +1359,7 @@ export default function Ventes() {
                 {demandesAnnulation.map((v) => (
                   <div key={v.id} style={{ ...styles.carteAttente, background: 'var(--white)', marginTop: 8 }}>
                     <div style={styles.enTeteCarteAttente}>
-                      <span style={{ fontWeight: 700 }}>{v.numero} — {Number(v.totalNet).toLocaleString('fr-FR')} F</span>
+                      <span style={{ fontWeight: 700 }}>{v.numero} — {Number(v.totalNet).toLocaleString('fr-FR')} F{v.sansCoordonnees && <span style={styles.badgeSansCoord}>Sans coordonnées</span>}</span>
                       <span style={styles.texteMuet}>{v.demandeurAnnulation?.nomComplet}</span>
                     </div>
                     <div style={styles.texteMuet}>
@@ -1381,7 +1395,7 @@ export default function Ventes() {
               {ventesHistoriqueAffichees.map((v) => (
                 <div key={v.id} style={styles.carteAttente}>
                   <div style={styles.enTeteCarteAttente}>
-                    <span style={{ fontWeight: 700 }}>{v.numero} — {Number(v.totalNet).toLocaleString('fr-FR')} F</span>
+                    <span style={{ fontWeight: 700 }}>{v.numero} — {Number(v.totalNet).toLocaleString('fr-FR')} F{v.sansCoordonnees && <span style={styles.badgeSansCoord}>Sans coordonnées</span>}</span>
                     <span style={styles.texteMuet}>{new Date(v.createdAt).toLocaleString('fr-FR')}</span>
                   </div>
                   <div style={styles.texteMuet}>
@@ -1742,9 +1756,68 @@ export default function Ventes() {
                     </div>
                   </div>
                 )}
-                <p style={{ ...styles.texteMuet, marginTop: 4 }}>
-                  Laissé vide, la vente est associée à "Client Comptoir".
-                </p>
+                {!regleCoordonnees.obligatoire && (
+                  <p style={{ ...styles.texteMuet, marginTop: 4 }}>
+                    Laissé vide, la vente est associée à "Client Comptoir".
+                  </p>
+                )}
+                {regleCoordonnees.obligatoire && clientIdentifie && (
+                  <p style={{ ...styles.texteMuet, marginTop: 4, color: '#1E6B36', fontWeight: 600 }}>
+                    ✓ Client identifié (nom et téléphone).
+                  </p>
+                )}
+                {coordonneesManquantes && (
+                  <div style={styles.coordManquantes}>
+                    <strong>Coordonnées requises</strong>
+                    <div style={{ fontSize: 12.5, margin: '2px 0 6px' }}>
+                      Choisissez ou créez le client (nom et téléphone).
+                      {clientDeLaVente && !clientDeLaVente.estComptoir && normaliserTelephone(clientDeLaVente.telephone) === null
+                        ? " Le numéro de ce client n'est pas valide : corrigez-le dans sa fiche (menu Clients)."
+                        : ''}
+                    </div>
+                    {sansCoordonnees ? (
+                      <div style={{ fontSize: 12.5 }}>
+                        <span style={styles.badgeSansCoord}>Vente sans coordonnées</span>{' '}
+                        {regleCoordonnees.motifs.find((m) => m.code === sansCoordonnees.motif)?.libelle}
+                        {sansCoordonnees.detail ? ` — ${sansCoordonnees.detail}` : ''}{' '}
+                        <button type="button" onClick={() => setSansCoordonnees(null)} style={styles.boutonRetirer}>Annuler</button>
+                      </div>
+                    ) : selecteurMotifOuvert ? (
+                      <div style={{ fontSize: 13 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>Pourquoi sans coordonnées ?</div>
+                        {regleCoordonnees.motifs.map((m) => (
+                          <label key={m.code} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, cursor: 'pointer' }}>
+                            <input type="radio" name="motifSansCoordonnees" checked={motifChoisi === m.code} onChange={() => setMotifChoisi(m.code)} />
+                            {m.libelle}
+                          </label>
+                        ))}
+                        {motifChoisi === 'AUTRE' && (
+                          <input
+                            style={{ ...styles.champInput, marginTop: 4, width: '100%' }}
+                            placeholder="Précisez (3 caractères au moins)"
+                            value={detailMotif}
+                            onChange={(e) => setDetailMotif(e.target.value)}
+                          />
+                        )}
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                          <button type="button" onClick={() => setSelecteurMotifOuvert(false)} style={styles.boutonRetirer}>Retour</button>
+                          <button
+                            type="button"
+                            onClick={confirmerSansCoordonnees}
+                            disabled={!motifChoisi || (motifChoisi === 'AUTRE' && detailMotif.trim().length < 3)}
+                            style={styles.boutonAjouterPaiement}
+                          >
+                            Confirmer
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => setSelecteurMotifOuvert(true)} style={styles.boutonAjouterPaiement}>
+                        Vendre sans coordonnées
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div style={{ maxWidth: 340 }}>
@@ -2146,6 +2219,8 @@ export default function Ventes() {
 }
 
 const styles = {
+  coordManquantes: { background: '#FFF4D6', border: '1px solid var(--gold-deep)', borderRadius: 8, padding: '8px 10px', marginTop: 6, fontSize: 13 },
+  badgeSansCoord: { marginLeft: 6, fontSize: 11, fontWeight: 700, color: '#8A4B00', background: '#FFE1BD', padding: '2px 7px', borderRadius: 20 },
   page: { display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-body)', color: 'var(--brown-ink)' },
   sidebar: { width: 220, background: 'var(--brown-deep)', color: 'var(--cream)', padding: 20, display: 'flex', flexDirection: 'column', gap: 16, flexShrink: 0 },
   boutonRetour: { padding: '8px 10px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', color: 'var(--cream)', cursor: 'pointer', fontSize: 13 },

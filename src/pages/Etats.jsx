@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { appelApi, getUtilisateur, telechargerFichierAvecAuth } from '../lib/api';
 import RaccourcisPeriode from '../lib/RaccourcisPeriode';
+import EtatCoordonnees from './EtatCoordonnees';
+import ClientsARelancer from './ClientsARelancer';
+import ClientsARemercier from './ClientsARemercier';
 
 function formatDate(d) {
   const annee = d.getFullYear();
@@ -82,9 +85,14 @@ export default function Etats() {
     { id: 'fermeture', label: 'Fermeture de caisse' },
     { id: 'fidelite', label: 'Récompenses fidélité' },
     { id: 'peremption', label: 'Péremption' },
+    ...(estAdmin ? [{ id: 'coordonnees', label: 'Collecte des coordonnées' }] : []),
+    ...(estAdmin ? [{ id: 'remercier', label: 'Clients à remercier' }] : []),
+    ...(estAdmin ? [{ id: 'relance', label: 'Clients à relancer' }] : []),
   ];
 
-  const [ongletActif, setOngletActif] = useState('date');
+  const [searchParams] = useSearchParams();
+  // Ouverture directe d'un onglet depuis une autre page (ex. carte du tableau de bord : ?onglet=coordonnees).
+  const [ongletActif, setOngletActif] = useState(searchParams.get('onglet') || 'date');
   const [lieux, setLieux] = useState([]);
   const [lieuId, setLieuId] = useState('');
 
@@ -130,7 +138,7 @@ export default function Etats() {
   }, []);
 
   async function chargerOnglet() {
-    if (ongletActif === 'fermeture' || ongletActif === 'fidelite' || ongletActif === 'journal' || ongletActif === 'peremption' || ongletActif === 'remises') return;
+    if (ongletActif === 'fermeture' || ongletActif === 'fidelite' || ongletActif === 'journal' || ongletActif === 'peremption' || ongletActif === 'remises' || ongletActif === 'coordonnees' || ongletActif === 'remercier' || ongletActif === 'relance') return;
     // Compteur de requêtes : si une réponse plus ancienne arrive après une plus récente
     // (ex: clics rapides entre onglets), on l'ignore pour ne jamais afficher des données
     // qui ne correspondent pas à l'onglet actuellement affiché.
@@ -350,7 +358,8 @@ export default function Etats() {
         <h1 style={styles.titre}>États</h1>
       </div>
 
-      <div style={styles.nav}>
+      <div style={styles.corps}>
+      <div style={styles.nav} className="etats-nav">
         {ONGLETS.map((o) => (
           <div
             key={o.id}
@@ -362,7 +371,9 @@ export default function Etats() {
         ))}
       </div>
 
-      {ongletActif === 'fidelite' ? (
+      <div style={styles.contenu}>
+
+      {ongletActif === 'coordonnees' || ongletActif === 'remercier' || ongletActif === 'relance' ? null : ongletActif === 'fidelite' ? (
         <div style={styles.blocFiltres}>
           <div style={styles.raccourcis}>
             {[
@@ -505,7 +516,13 @@ export default function Etats() {
         </div>
       )}
 
-      {ongletActif === 'fermeture' ? (
+      {ongletActif === 'coordonnees' ? (
+        <EtatCoordonnees />
+      ) : ongletActif === 'remercier' ? (
+        <ClientsARemercier />
+      ) : ongletActif === 'relance' ? (
+        <ClientsARelancer />
+      ) : ongletActif === 'fermeture' ? (
         <>
           {fermetureErreur && <div style={styles.bandeauErreur}>{fermetureErreur}</div>}
           {fermetureChargement && <p style={styles.texteMuet}>Chargement…</p>}
@@ -882,6 +899,8 @@ export default function Etats() {
           )}
         </>
       )}
+      </div>
+      </div>
     </div>
   );
 }
@@ -891,9 +910,12 @@ const styles = {
   enTete: { display: 'flex', alignItems: 'center', gap: 16 },
   titre: { fontFamily: 'var(--font-display)', margin: 0, fontSize: 24 },
   boutonRetour: { padding: '8px 10px', borderRadius: 8, border: '1px solid var(--gold-mid)', background: 'transparent', color: 'var(--brown-ink)', cursor: 'pointer', fontSize: 13 },
-  nav: { display: 'flex', gap: 6, flexWrap: 'wrap' },
-  navItem: { padding: '8px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', border: '1px solid var(--cream-deep)' },
-  navItemActif: { padding: '8px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', background: 'var(--gold-deep)', color: 'var(--white)', fontWeight: 600, border: '1px solid var(--gold-deep)' },
+  // Menu des onglets en colonne à gauche, contenu à droite (sous le menu sur un écran étroit).
+  corps: { display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' },
+  nav: { display: 'flex', flexDirection: 'column', gap: 4, flex: '0 0 230px' },
+  contenu: { flex: 1, minWidth: 320, display: 'flex', flexDirection: 'column', gap: 16 },
+  navItem: { padding: '10px 14px', borderRadius: 10, fontSize: 13.5, cursor: 'pointer', border: '1px solid var(--cream-deep)', background: 'var(--white)' },
+  navItemActif: { padding: '10px 14px', borderRadius: 10, fontSize: 13.5, cursor: 'pointer', background: 'var(--gold-deep)', color: 'var(--white)', fontWeight: 600, border: '1px solid var(--gold-deep)' },
   blocFiltres: { display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap', background: 'var(--white)', padding: 16, borderRadius: 12 },
   champLabel: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600 },
   champInput: { padding: '8px 10px', borderRadius: 8, border: '1px solid var(--cream-deep)', fontSize: 14, minWidth: 160 },

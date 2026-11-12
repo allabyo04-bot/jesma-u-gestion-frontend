@@ -48,3 +48,17 @@ a {
 .champ-majuscule {
   text-transform: uppercase;
 }
+
+/* Menu vertical des États : reste visible à gauche quand on fait défiler un long état. */
+.etats-nav {
+  position: sticky;
+  top: 16px;
+}
+
+/* Écran étroit : le menu passe en pleine largeur au-dessus du contenu, sans rester collé à l'écran. */
+@media (max-width: 760px) {
+  .etats-nav {
+    position: static !important;
+    flex: 1 1 100% !important;
+  }
+}

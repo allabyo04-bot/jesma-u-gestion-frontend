@@ -95,6 +95,16 @@ export default function Dashboard() {
               )}
               <span style={styles.sousTexte}>{dashboard.listesCadeaux.totalOfferConfirme.toLocaleString('fr-FR')} F offerts au total</span>
             </CarteKpi>
+            {estAdmin && dashboard.coordonnees && (
+              <CarteKpi
+                icone="📞"
+                label={dashboard.coordonnees.actif ? "Ventes sans coordonnées (aujourd'hui)" : "Ventes sans client identifié (aujourd'hui)"}
+                valeur={`${dashboard.coordonnees.actif ? dashboard.coordonnees.derogations : dashboard.coordonnees.sansClient} sur ${dashboard.coordonnees.ventes}`}
+                sousTexte="Nom + téléphone du client — ouvre le rapport"
+                accent={dashboard.coordonnees.sansClient > 0}
+                onClick={() => navigate('/etats?onglet=coordonnees')}
+              />
+            )}
             {estAdmin && (
               <>
                 <CarteKpi
